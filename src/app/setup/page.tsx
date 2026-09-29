@@ -5,6 +5,7 @@ import { db, schema } from "@/db";
 import { requireContext } from "@/lib/session";
 import { GST_STATES, stateByCode } from "@/lib/gst/states";
 import { Button, Card, Field, Input, Notice, Select, Status } from "@/components/ui";
+import { OpeningForm } from "@/components/opening-form";
 import { saveBusinessAction, saveGstAction, addBankAction, addBrandAction, goToStepAction } from "../actions";
 
 const STEPS = ["Business", "GST", "Bank accounts", "Brands", "Customers", "Suppliers", "Opening balances", "Ready"];
@@ -21,8 +22,8 @@ export default async function Setup({ searchParams }: { searchParams: Promise<{ 
     <ol className="mt-6 mb-8 flex flex-wrap gap-2" aria-label="Setup steps">
       {STEPS.map((s, i) => <li key={s}>
         <Link href={`/setup?step=${i + 1}`} aria-current={step === i + 1 ? "step" : undefined}
-          className={`rounded-full px-3 py-1 text-[13px] ${step === i + 1 ? "bg-brand text-brand-ink" : i + 1 < c.setupStep && !(i >= 4 && i <= 6) ? "bg-good-bg text-good" : "bg-surface-2 text-ink-2"}`}>
-          {i + 1 < c.setupStep && step !== i + 1 ? (i >= 4 && i <= 6 ? "– " : "✓ ") : `${i + 1}. `}{s}</Link></li>)}
+          className={`rounded-full px-3 py-1 text-[13px] ${step === i + 1 ? "bg-brand text-brand-ink" : i + 1 < c.setupStep && !(i >= 4 && i <= 5) ? "bg-good-bg text-good" : "bg-surface-2 text-ink-2"}`}>
+          {i + 1 < c.setupStep && step !== i + 1 ? (i >= 4 && i <= 5 ? "– " : "✓ ") : `${i + 1}. `}{s}</Link></li>)}
     </ol>
     {sp.error && !sp.field && <div className="mb-4"><Notice tone="bad" title={sp.error} /></div>}
 
@@ -72,12 +73,20 @@ export default async function Setup({ searchParams }: { searchParams: Promise<{ 
     {step === 3 && <BankStep companyId={c.id} err={err} />}
     {step === 4 && <BrandStep companyId={c.id} err={err} />}
 
-    {(step === 5 || step === 6 || step === 7) && <Card>
+    {step === 7 && <Card>
+      <h2 className="text-[22px] font-semibold">Opening balances</h2>
+      <p className="mb-6 text-ink-2">How much cash and bank balance the business has today. You can change this later in Settings.</p>
+      <OpeningForm companyId={c.id} back="setup" />
+      <form action={goToStepAction} className="mt-6 flex justify-between border-t border-line pt-6">
+        <Link href="/setup?step=6" className="py-2.5 text-ink-2">← Back</Link>
+        <input type="hidden" name="step" value="8" /><Button variant="secondary">Skip for now</Button></form>
+    </Card>}
+
+    {(step === 5 || step === 6) && <Card>
       <h2 className="text-[22px] font-semibold">{STEPS[step - 1]}</h2>
       <div className="my-6"><Notice tone="info" title="Not built yet">
         {step === 5 && "Adding customers arrives in the next update (Phase 3). You'll be able to add them one by one or import from Excel."}
         {step === 6 && "Adding suppliers arrives in the next update (Phase 3)."}
-        {step === 7 && "Opening balances (cash, bank, stock, dues) need the accounting engine, which arrives in Phase 2. Nothing is posted until then."}
       </Notice></div>
       <form action={goToStepAction} className="flex justify-between">
         <Link href={`/setup?step=${step - 1}`} className="py-2.5 text-ink-2">← Back</Link>
@@ -87,7 +96,7 @@ export default async function Setup({ searchParams }: { searchParams: Promise<{ 
 
     {step === 8 && <Card>
       <h2 className="text-[22px] font-semibold">You&rsquo;re set up</h2>
-      <p className="mt-2 mb-6 text-ink-2">Your accounts, GST ledgers and main godown are ready. Buying, selling and reports switch on as each part is built.</p>
+      <p className="mt-2 mb-6 text-ink-2">Your accounts, GST ledgers and main godown are ready. You can record money in and out now; buying and selling switch on as each part is built.</p>
       <form action={goToStepAction}><input type="hidden" name="step" value="8" /><input type="hidden" name="finish" value="1" />
         <Button>Go to my dashboard</Button></form>
     </Card>}

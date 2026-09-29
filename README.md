@@ -2,7 +2,9 @@
 
 Owner-first accounting, GST, billing and inventory for an Indian wholesale business (starting with SF Sonic and Usha).
 
-**Status: Phase 1 of 10.** Setup, database, login and roles, design system, company setup wizard, default chart of accounts.
+**Status: Phase 2 of 10.**
+- Phase 1: setup, database, login and roles, design system, company setup wizard, default chart of accounts.
+- Phase 2: double-entry posting engine (enforced by database triggers), vouchers (money in/out, cash↔bank, adjustments), reversal instead of deletion, opening balances, trial balance, account statements, day book, owner/accountant view, system health, team password reset.
 Sections that aren't built yet say so plainly. They never show sample numbers.
 
 ## Stack
@@ -38,7 +40,7 @@ TEST_DATABASE_URL="postgresql://.../bizos_test" npm test
 drizzle/                   SQL migrations (generated, committed)
 scripts/migrate.ts         applies migrations
 src/db/schema.ts           database tables
-src/lib/accounting/        chart of accounts (posting engine arrives in Phase 2)
+src/lib/accounting/        chart of accounts, posting engine, ledger reports
 src/lib/gst/               GST state codes, GSTIN validation
 src/lib/services/          business logic (all writes are audited)
 src/lib/permissions.ts     role → permission matrix
@@ -47,6 +49,7 @@ tests/                     unit + database tests
 ```
 
 ## Principles enforced in code
+- Every journal entry must balance. The database itself rejects unbalanced entries, and edits or deletes of posted lines.
 - Money is `numeric(18,2)` in the DB and `decimal.js` in code, never JavaScript floats.
 - Every write goes through a service that records an audit log entry with before/after values.
 - Money-related records are never hard-deleted (foreign keys use `ON DELETE RESTRICT`).

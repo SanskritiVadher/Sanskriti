@@ -5,8 +5,9 @@
  */
 import {
   pgTable, pgEnum, uuid, text, integer, boolean, timestamp, date, jsonb,
-  uniqueIndex, index, type AnyPgColumn,
+  uniqueIndex, index, numeric, check, type AnyPgColumn,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 export const roleEnum = pgEnum("role", [
   "OWNER", "ADMIN", "ACCOUNTANT", "SALESPERSON", "PURCHASE_MANAGER", "INVENTORY_MANAGER", "VIEWER",
@@ -148,3 +149,62 @@ export const auditLogs = pgTable("audit_logs", {
   index("audit_company_created_idx").on(t.companyId, t.createdAt),
   index("audit_entity_idx").on(t.entityType, t.entityId),
 ]);
+
+// ───────────────────────── Phase 2: accounting engine ─────────────────────────
+
+export const voucherTypeEnum = pgEnum("voucher_type", [
+  "OPENING", "JOURNAL", "RECEIPT", "PAYMENT", "CONTRA", "REVERSAL",
+  "SALES", "PURCHASE", "CREDIT_NOTE", "DEBIT_NOTE", "STOCK_ADJUSTMENT",
+]);
+export const entryStatusEnum = pgEnum("entry_status", ["POSTED", "REVERSED"]);
+
+const money = (n: string) => numeric(n, { precision: 18, scale: 2 });
+
+export const journalEntries = pgTable("journal_entries", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "restrict" }),
+  periodId: uuid("period_id").notNull().references(() => financialPeriods.id, { onDelete: "restrict" }),
+  voucherType: voucherTypeEnum("voucher_type").notNull(),
+  voucherNumber: text("voucher_number").notNull(),
+  entryDate: date("entry_date").notNull(),
+  narration: text("narration"),
+  status: entryStatusEnum("status").notNull().default("POSTED"),
+  totalAmount: money("total_amount").notNull(),
+  reversalOfId: uuid("reversal_of_id").references((): AnyPgColumn => journalEntries.id),
+  reversedById: uuid("reversed_by_id").references((): AnyPgColumn => journalEntries.id),
+  reversalReason: text("reversal_reason"),
+  /** Where this entry came from, e.g. "manual", "opening", later "invoice". */
+  sourceType: text("source_type").notNull().default("manual"),
+  sourceId: text("source_id"),
+  createdBy: uuid("created_by").notNull().references(() => users.id, { onDelete: "restrict" }),
+  createdAt: ts("created_at").notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("je_company_number_uq").on(t.companyId, t.voucherNumber),
+  index("je_company_date_idx").on(t.companyId, t.entryDate),
+  index("je_source_idx").on(t.sourceType, t.sourceId),
+]);
+
+export const journalLines = pgTable("journal_lines", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  entryId: uuid("entry_id").notNull().references(() => journalEntries.id, { onDelete: "restrict" }),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "restrict" }),
+  accountId: uuid("account_id").notNull().references(() => accounts.id, { onDelete: "restrict" }),
+  lineNo: integer("line_no").notNull(),
+  debit: money("debit").notNull().default("0"),
+  credit: money("credit").notNull().default("0"),
+  narration: text("narration"),
+}, (t) => [
+  index("jl_account_idx").on(t.companyId, t.accountId),
+  index("jl_entry_idx").on(t.entryId),
+  check("jl_non_negative", sql`${t.debit} >= 0 AND ${t.credit} >= 0`),
+  check("jl_one_sided", sql`(${t.debit} = 0) <> (${t.credit} = 0)`),
+]);
+
+/** Gap-free voucher numbering per company, voucher type and financial year. Row-locked when used. */
+export const voucherSequences = pgTable("voucher_sequences", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "restrict" }),
+  voucherType: voucherTypeEnum("voucher_type").notNull(),
+  periodId: uuid("period_id").notNull().references(() => financialPeriods.id, { onDelete: "restrict" }),
+  nextNumber: integer("next_number").notNull().default(1),
+}, (t) => [uniqueIndex("vseq_uq").on(t.companyId, t.voucherType, t.periodId)]);

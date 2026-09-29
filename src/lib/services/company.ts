@@ -6,19 +6,11 @@ import { validateGstin } from "@/lib/gst/gstin";
 import { stateByCode } from "@/lib/gst/states";
 import { audit } from "./audit";
 
-export class UserFacingError extends Error {
-  constructor(message: string, public field?: string) { super(message); }
-}
+import { UserFacingError } from "@/lib/errors";
+export { UserFacingError };
 
-/** Financial year containing `d`, given a start month (4 = April). */
-export function financialYearFor(d: Date, startMonth = 4) {
-  const y = d.getMonth() + 1 >= startMonth ? d.getFullYear() : d.getFullYear() - 1;
-  const start = `${y}-${String(startMonth).padStart(2, "0")}-01`;
-  const endDate = new Date(Date.UTC(y + 1, startMonth - 1, 0));
-  const end = endDate.toISOString().slice(0, 10);
-  const name = startMonth === 4 ? `FY ${y}-${String((y + 1) % 100).padStart(2, "0")}` : `FY ${start} to ${end}`;
-  return { name, start, end };
-}
+import { financialYearFor } from "@/lib/accounting/periods";
+export { financialYearFor };
 
 export async function seedChartOfAccounts(tx: Tx, companyId: string) {
   const idByCode = new Map<string, string>();
@@ -178,4 +170,41 @@ export async function addUser(
     await audit(tx, { companyId, userId: actorId, action: "user.create", entityType: "user", entityId: u.id, after: { email, role: input.role } });
     return u;
   });
+}
+
+// ───────────── Team management (Phase 2) ─────────────
+
+async function assertCanManage(db: DB, companyId: string, actorId: string, targetUserId: string) {
+  const [actor, target] = await Promise.all([
+    db.query.memberships.findFirst({ where: and(eq(schema.memberships.companyId, companyId), eq(schema.memberships.userId, actorId)) }),
+    db.query.memberships.findFirst({ where: and(eq(schema.memberships.companyId, companyId), eq(schema.memberships.userId, targetUserId)) }),
+  ]);
+  if (!target) throw new UserFacingError("That person isn't part of this business.");
+  if (target.role === "OWNER" && actor?.role !== "OWNER") throw new UserFacingError("Only the owner can change the owner's account.");
+  return target;
+}
+
+/** Owner/admin sets a new password for a team member (no email service needed). */
+export async function resetUserPassword(db: DB, companyId: string, actorId: string, targetUserId: string, newPassword: string) {
+  if (newPassword.length < 8) throw new UserFacingError("New password must be at least 8 characters.", "password");
+  await assertCanManage(db, companyId, actorId, targetUserId);
+  await db.update(schema.users).set({ passwordHash: await bcrypt.hash(newPassword, 10) }).where(eq(schema.users.id, targetUserId));
+  await audit(db, { companyId, userId: actorId, action: "user.password_reset", entityType: "user", entityId: targetUserId });
+}
+
+export async function setUserActive(db: DB, companyId: string, actorId: string, targetUserId: string, active: boolean) {
+  if (actorId === targetUserId) throw new UserFacingError("You can't deactivate your own account.");
+  const t = await assertCanManage(db, companyId, actorId, targetUserId);
+  if (t.role === "OWNER") throw new UserFacingError("The owner account can't be deactivated.");
+  await db.update(schema.users).set({ isActive: active }).where(eq(schema.users.id, targetUserId));
+  await audit(db, { companyId, userId: actorId, action: active ? "user.activate" : "user.deactivate", entityType: "user", entityId: targetUserId });
+}
+
+/** Any user changes their own password (needs the current one). */
+export async function changeOwnPassword(db: DB, userId: string, current: string, next: string) {
+  const u = await db.query.users.findFirst({ where: eq(schema.users.id, userId) });
+  if (!u || !(await bcrypt.compare(current, u.passwordHash))) throw new UserFacingError("Current password is incorrect.", "current");
+  if (next.length < 8) throw new UserFacingError("New password must be at least 8 characters.", "password");
+  await db.update(schema.users).set({ passwordHash: await bcrypt.hash(next, 10) }).where(eq(schema.users.id, userId));
+  await audit(db, { userId, action: "user.password_change", entityType: "user", entityId: userId });
 }

@@ -4,6 +4,9 @@ import { db, schema } from "@/db";
 import { requireContext } from "@/lib/session";
 import { stateByCode } from "@/lib/gst/states";
 import { Card, Notice, PageHeader, Status } from "@/components/ui";
+import { moneyPosition } from "@/lib/accounting/reports";
+import { formatINRShort } from "@/lib/money";
+import { todayIST } from "@/lib/dates";
 
 function greeting() {
   const h = Number(new Intl.DateTimeFormat("en-IN", { hour: "numeric", hour12: false, timeZone: "Asia/Kolkata" }).format(new Date()));
@@ -20,11 +23,14 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ w
     db.select({ n: sql<number>`count(*)::int` }).from(schema.accounts).where(and(eq(schema.accounts.companyId, c.id))),
   ]);
 
+  const money = await moneyPosition(db, c.id, todayIST());
+  const [{ n: entryCount }] = await db.select({ n: sql<number>`count(*)::int` }).from(schema.journalEntries).where(eq(schema.journalEntries.companyId, c.id));
   const checks = [
     { label: "Business details", done: !!(c.addressLine1 && c.stateCode), href: "/setup?step=1" },
     { label: c.gstRegistration === "UNREGISTERED" ? "GST: not registered" : "GST number", done: c.gstRegistration === "UNREGISTERED" || !!c.gstin, href: "/setup?step=2" },
     { label: "Bank account", done: banks[0].n > 0, href: "/setup?step=3" },
     { label: "Brands", done: brands.length > 0, href: "/setup?step=4" },
+    { label: "Opening balances", done: !!c.booksBeginOn, href: "/settings/opening" },
   ];
 
   return <>
@@ -34,8 +40,12 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ w
 
     <Card className="mb-6">
       <h2 className="text-[18px] font-semibold">Your business pulse</h2>
-      <p className="mt-2 text-ink-2">No sales or purchases are recorded yet, so there is nothing to analyse. Once billing is live, this space will tell you
-        how sales, profit, cash, dues and stock are moving — and why.</p>
+      {entryCount > 0 && <div className="mt-3 flex flex-wrap items-baseline justify-between gap-2 rounded-xl bg-surface-2 px-4 py-3">
+        <div><p className="text-[14px] text-ink-2">Cash and bank today</p>
+          <p className="num text-[26px] font-semibold">{formatINRShort(money.total)}</p></div>
+        <Link href="/money" className="text-[14px] text-brand underline">Where is it? →</Link></div>}
+      <p className="mt-3 text-ink-2">Sales and purchases aren&rsquo;t recorded yet (billing arrives in Phase 4), so there&rsquo;s no profit or sales trend to explain yet.
+        Once billing is live, this space will tell you how sales, profit, cash, dues and stock are moving, and why.</p>
       <p className="mt-3 text-[13px] text-ink-3">We never show made-up numbers here. Every figure will come from your own records.</p>
     </Card>
 

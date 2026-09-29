@@ -9,17 +9,17 @@ export const ROLE_LABEL: Record<Role, string> = {
 export type Permission =
   | "company.edit" | "users.manage" | "gst.configure" | "reports.financial" | "exports"
   | "sales.create" | "purchases.create" | "inventory.adjust" | "transactions.cancel"
-  | "ledger.post_manual" | "view.dashboard";
+  | "ledger.post_manual" | "view.dashboard" | "money.record";
 
 const ALL: Permission[] = [
   "company.edit", "users.manage", "gst.configure", "reports.financial", "exports", "sales.create",
-  "purchases.create", "inventory.adjust", "transactions.cancel", "ledger.post_manual", "view.dashboard",
+  "purchases.create", "inventory.adjust", "transactions.cancel", "ledger.post_manual", "view.dashboard", "money.record",
 ];
 
 const MATRIX: Record<Role, Permission[]> = {
   OWNER: ALL,
   ADMIN: ALL.filter((p) => p !== "ledger.post_manual"),
-  ACCOUNTANT: ["gst.configure", "reports.financial", "exports", "sales.create", "purchases.create", "transactions.cancel", "ledger.post_manual", "view.dashboard"],
+  ACCOUNTANT: ["money.record", "gst.configure", "reports.financial", "exports", "sales.create", "purchases.create", "transactions.cancel", "ledger.post_manual", "view.dashboard"],
   SALESPERSON: ["sales.create", "view.dashboard"],
   PURCHASE_MANAGER: ["purchases.create", "view.dashboard"],
   INVENTORY_MANAGER: ["inventory.adjust", "view.dashboard"],
