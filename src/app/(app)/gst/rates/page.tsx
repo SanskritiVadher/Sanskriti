@@ -1,27 +1,48 @@
+import Link from "next/link";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { requireContext } from "@/lib/session";
 import { can } from "@/lib/permissions";
-import { ruleFor } from "@/lib/services/gst";
+import { ruleFor, rateProblems, gstStrict, trustedRule } from "@/lib/services/gst";
 import { D } from "@/lib/money";
 import { fmtDate, todayIST } from "@/lib/dates";
 import { Button, Card, Field, Input, Notice, PageHeader, Select, Status } from "@/components/ui";
-import { addRuleAction, confirmRuleAction, starterRulesAction } from "@/app/actions-phase5";
+import { addRuleAction, confirmRuleAction, starterRulesAction, gstStrictAction, confirmProductRatesAction } from "@/app/actions-phase5";
 
 const ST = { VERIFIED: ["good", "Verified (official source)"], USER_CONFIRMED: ["good", "Checked by you"], SECONDARY_SOURCE: ["warn", "From a secondary source — confirm"], UNVERIFIED: ["bad", "Unverified"] } as const;
 
-export default async function Rates({ searchParams }: { searchParams: Promise<{ saved?: string; applied?: string; error?: string }> }) {
+export default async function Rates({ searchParams }: { searchParams: Promise<{ saved?: string; applied?: string; error?: string; confirmed?: string }> }) {
   const ctx = await requireContext("view.dashboard");
   const sp = await searchParams;
   const [rules, prods] = await Promise.all([db.query.gstRateRules.findMany({ where: eq(schema.gstRateRules.companyId, ctx.company.id), orderBy: schema.gstRateRules.hsnPrefix }),
     db.query.products.findMany({ where: eq(schema.products.companyId, ctx.company.id) })]);
   const today = todayIST();
   const edit = can(ctx.role, "gst.configure");
-  const rows = prods.filter((p) => p.isActive).map((p) => ({ p, rule: ruleFor(rules, p.hsn, today) }));
+  const rows = prods.filter((p) => p.isActive).map((p) => ({ p, rule: ruleFor(rules, p.hsn, today) }))
+    .sort((a, b) => Number(a.p.gstRateStatus === "USER_CONFIRMED") - Number(b.p.gstRateStatus === "USER_CONFIRMED") || a.p.name.localeCompare(b.p.name));
+  const [probs, strict] = await Promise.all([rateProblems(db, ctx.company.id, today), gstStrict(db, ctx.company.id)]);
+  const conflictIds = new Set(probs.hsnConflicts.flatMap((c) => c.rates.flatMap((r) => r.products.map((p) => p.id))));
+  const blocking = probs.unconfirmed.length + probs.ruleMismatch.length + probs.noRate.length;
   return <>
     <PageHeader title="GST rates" subtitle="Where each rate comes from, and whether it's been checked." />
     {sp.saved && <div className="mb-4"><Notice tone="good" title={`Saved.${sp.applied && sp.applied !== "0" ? ` Rate applied to ${sp.applied} product(s).` : ""}`} /></div>}
     {sp.error && <div className="mb-4"><Notice tone="bad" title={sp.error} /></div>}
+    {sp.confirmed && <div className="mb-4"><Notice tone="good" title={`${sp.confirmed} product rate${sp.confirmed === "1" ? "" : "s"} confirmed.`} /></div>}
+
+    <Card className="mb-6">
+      <div className="flex flex-wrap items-start justify-between gap-3"><div className="max-w-2xl">
+        <h2 className="text-[18px] font-semibold">Only bill checked rates</h2>
+        <p className="mt-1 text-[14px] text-ink-2">{strict.on
+          ? <>On since {fmtDate(strict.since!)}. A sale is refused if any product&rsquo;s rate isn&rsquo;t confirmed, or doesn&rsquo;t match your checked rate table.</>
+          : <>Off. Unchecked rates only show a warning when billing. Turn this on once your products are checked, so staff can&rsquo;t bill at a wrong rate.</>}</p>
+        {!strict.on && blocking > 0 && <p className="mt-1 text-[14px] text-warn">{blocking} product{blocking > 1 ? "s" : ""} would be blocked right now: {probs.unconfirmed.length} not confirmed{probs.ruleMismatch.length ? `, ${probs.ruleMismatch.length} different from the rate table` : ""}{probs.noRate.length ? `, ${probs.noRate.length} with no rate` : ""}.</p>}
+      </div>
+      {edit && <form action={gstStrictAction}><input type="hidden" name="on" value={strict.on ? "0" : "1"} /><Button variant={strict.on ? "secondary" : "primary"}>{strict.on ? "Turn off" : "Turn on"}</Button></form>}</div>
+    </Card>
+
+    {probs.hsnConflicts.length > 0 && <Card className="mb-6"><h2 className="text-[18px] font-semibold">Same HSN, different rates</h2>
+      <p className="mt-1 text-[14px] text-ink-2">One HSN code normally has one rate. At least one product in each group below is wrong.</p>
+      <ul className="mt-3 space-y-2 text-[14px]">{probs.hsnConflicts.map((c) => <li key={c.hsn}><b className="num">HSN {c.hsn}:</b> {c.rates.map((r) => <span key={r.rate} className="mr-3">{r.rate}% — {r.products.map((p) => p.name).join(", ")}</span>)}</li>)}</ul></Card>}
     <Notice tone="info" title="The app never changes a GST rate on its own.">There is no official live feed of GST rates. Rates here come from you, or from sources we researched,
       and each shows where it came from. A rate is used on bills only after you confirm it.</Notice>
 
@@ -45,14 +66,23 @@ export default async function Rates({ searchParams }: { searchParams: Promise<{ 
         </tr>)}</tbody></table>}
     </Card>
 
-    <Card className="mb-6 overflow-x-auto">
-      <h2 className="mb-3 text-[18px] font-semibold">Your products</h2>
-      <table className="w-full min-w-[560px] text-[14px]"><caption className="sr-only">Product rates</caption>
-        <thead className="text-left text-[12px] text-ink-3"><tr><th className="pb-2">Product</th><th className="pb-2">HSN</th><th className="pb-2">Rate on product</th><th className="pb-2">Rate table says</th></tr></thead>
-        <tbody>{rows.map(({ p, rule }) => <tr key={p.id} className="border-t border-line">
-          <td className="py-2">{p.name}</td><td className="num">{p.hsn ?? <Status tone="warn">missing</Status>}</td>
+    <Card className="mb-6 overflow-x-auto"><section id="products">
+      <h2 className="mb-1 text-[18px] font-semibold">Your products</h2>
+      <p className="mb-3 text-[14px] text-ink-2">Take one recent bill from each supplier. Tick the products whose HSN and rate match that bill, write the bill number, and confirm.</p>
+      <form action={confirmProductRatesAction}>
+      <table className="w-full min-w-[640px] text-[14px]"><caption className="sr-only">Product rates</caption>
+        <thead className="text-left text-[12px] text-ink-3"><tr>{edit && <th className="w-8 pb-2" />}<th className="pb-2">Product</th><th className="pb-2">HSN</th><th className="pb-2">Rate on product</th><th className="pb-2">Rate table says</th></tr></thead>
+        <tbody>{rows.map(({ p, rule }) => { const trusted = trustedRule(rule); const diff = !!(rule && p.gstRate && !D(rule.rate).eq(p.gstRate));
+          const canTick = edit && p.gstRate != null && p.gstRateStatus !== "USER_CONFIRMED" && !(trusted && diff); return <tr key={p.id} className="border-t border-line">
+          {edit && <td className="py-2">{canTick && <input type="checkbox" name="pid" value={p.id} aria-label={`Confirm ${p.name}`} />}</td>}
+          <td className="py-2"><Link className="hover:underline" href={`/inventory/${p.id}/edit`}>{p.name}</Link>{conflictIds.has(p.id) && <span className="ml-2 text-[12px] text-bad">HSN clash</span>}</td>
+          <td className="num">{p.hsn ?? <Status tone="warn">missing</Status>}</td>
           <td>{p.gstRate ? `${D(p.gstRate).toString()}%` : "—"} {p.gstRate && (p.gstRateStatus === "USER_CONFIRMED" ? <Status tone="good">confirmed</Status> : <Status tone="warn">not confirmed</Status>)}</td>
-          <td>{rule ? (p.gstRate && !D(rule.rate).eq(p.gstRate) ? <Status tone="bad">{D(rule.rate).toString()}% — different!</Status> : `${D(rule.rate).toString()}%`) : <span className="text-ink-3">no rule</span>}</td></tr>)}</tbody></table>
+          <td>{rule ? (diff ? <Status tone="bad">{D(rule.rate).toString()}% — different{trusted ? "" : " (table rate not checked)"}</Status> : `${D(rule.rate).toString()}%`) : <span className="text-ink-3">no rule</span>}</td></tr>; })}</tbody></table>
+      {edit && probs.unconfirmed.length > 0 && <div className="mt-4 flex flex-wrap items-end gap-3">
+        <Field label="Checked against (bill number)"><Input name="checkedAgainst" placeholder="e.g. SF Sonic bill 1234" required maxLength={120} /></Field>
+        <Button>Confirm ticked rates</Button></div>}
+      </form></section>
     </Card>
 
     {edit && <Card><h2 className="mb-3 text-[18px] font-semibold">Add a rate</h2>

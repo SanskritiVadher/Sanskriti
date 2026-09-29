@@ -170,7 +170,7 @@ describe("rate table", () => {
     expect(ruleFor(rules, "84145110", "2026-09-30")!.id).toBe(r2.id);
     expect(ruleFor(rules, "85071000", "2025-01-01")).toBeNull(); // before effective date
     const rev = await gstReview(db, cid, parsePeriod("2026-09"));
-    expect(rev.map((x) => x.what).join(" ")).toMatch(/different from your rate table: Ceiling Fan/);
+    expect(rev.map((x) => x.what).join(" ")).toMatch(/differ from an unchecked rate in your table: Ceiling Fan/);
     expect(rev.map((x) => x.what).join(" ")).toMatch(/inter-state bill\(s\) over ₹1 lakh/);
   });
 });

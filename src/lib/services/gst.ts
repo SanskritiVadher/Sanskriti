@@ -10,7 +10,7 @@
  */
 import { and, eq, gte, lte, sql, desc } from "drizzle-orm";
 import Decimal from "decimal.js";
-import { schema, type DB } from "@/db";
+import { schema, type DB, type Tx } from "@/db";
 import { D, toDb, formatINR } from "@/lib/money";
 import { UserFacingError } from "@/lib/errors";
 import { postEntryTx, type LineInput } from "@/lib/accounting/engine";
@@ -264,9 +264,12 @@ export async function gstReview(db: DB, companyId: string, per: Period): Promise
   if (noHsn.length) out.push({ what: `${noHsn.length} product(s) have no HSN code.`, why: "HSN is needed on tax invoices and in the GSTR-1 HSN summary.", href: "/inventory" });
   if (noRate.length) out.push({ what: `${noRate.length} product(s) have no GST rate.`, why: "They can't be billed until a rate is set.", href: "/inventory" });
   if (unconf.length) out.push({ what: `${unconf.length} product(s) have a GST rate that isn't confirmed.`, why: "A wrong rate means wrong tax on every bill.", href: "/gst/rates" });
-  const rules = await db.query.gstRateRules.findMany({ where: eq(schema.gstRateRules.companyId, companyId) });
-  const mism = prods.filter((p) => { const r = ruleFor(rules, p.hsn, per.to); return r && p.gstRate != null && !D(r.rate).eq(p.gstRate); });
-  if (mism.length) out.push({ what: `${mism.length} product(s) have a GST rate different from your rate table: ${mism.slice(0, 3).map((p) => p.name).join(", ")}.`, why: "One of the two is wrong.", href: "/gst/rates" });
+  const { hsnConflicts: conflicts, ruleMismatch, rules } = await rateProblems(db, companyId, per.to);
+  const mism = ruleMismatch.map((x) => x.p);
+  const softMism = prods.filter((p) => { const r = ruleFor(rules, p.hsn, per.to); return r && !trustedRule(r) && p.gstRate != null && !D(r.rate).eq(p.gstRate); });
+  if (softMism.length) out.push({ what: `${softMism.length} product(s) differ from an unchecked rate in your table: ${softMism.slice(0, 3).map((p) => p.name).join(", ")}.`, why: "The table rate isn't checked yet, so bills aren't blocked — but one of the two is probably wrong.", href: "/gst/rates" });
+  if (conflicts.length) out.push({ what: `${conflicts.length} HSN code(s) have different GST rates on different products: ${conflicts.slice(0, 2).map((c) => `${c.hsn} (${c.rates.map((r) => r.rate + "%").join(" / ")})`).join(", ")}.`, why: "The same HSN code normally has one rate. Check the products against your supplier's bill.", href: "/gst/rates" });
+  if (mism.length) out.push({ what: `${mism.length} product(s) have a GST rate different from your rate table: ${mism.slice(0, 3).map((p) => p.name).join(", ")}.`, why: "One of the two is wrong. Until fixed, these bills show a warning (or are refused if 'only bill checked rates' is on).", href: "/gst/rates" });
   const bigCash = await db.execute<{ n: number }>(sql`SELECT count(*)::int AS n FROM sales_invoices WHERE company_id = ${companyId} AND status = 'ACTIVE'
     AND supply_type = 'INTER' AND customer_gstin IS NULL AND total > 100000 AND invoice_date BETWEEN ${per.from} AND ${per.to}`);
   if (bigCash.rows[0].n) out.push({ what: `${bigCash.rows[0].n} inter-state bill(s) over ₹1 lakh to unregistered buyers.`, why: "These are reported invoice-by-invoice (B2C Large). Check the buyer really has no GSTIN.", href: `/gst/returns?period=${per.from.slice(0, 7)}` });
@@ -285,6 +288,56 @@ export function ruleFor(rules: Rule[], hsn: string | null, day: string) {
   if (!hsn) return null;
   return rules.filter((r) => hsn.startsWith(r.hsnPrefix) && r.effectiveFrom <= day && (!r.effectiveTo || r.effectiveTo >= day))
     .sort((a, b) => b.hsnPrefix.length - a.hsnPrefix.length)[0] ?? null;
+}
+
+// ───── Rate checks & strict billing ─────
+export type GstStrict = { on: boolean; since: string | null; by: string | null };
+export async function gstStrict(q: DB | Tx, companyId: string): Promise<GstStrict> {
+  const r = await q.execute<{ value: GstStrict }>(sql`SELECT value FROM settings WHERE company_id = ${companyId} AND key = 'gst_strict'`);
+  return r.rows[0]?.value ?? { on: false, since: null, by: null };
+}
+export async function setGstStrict(db: DB, companyId: string, userId: string, on: boolean) {
+  const before = await gstStrict(db, companyId);
+  const value: GstStrict = { on, since: on ? new Date().toISOString().slice(0, 10) : null, by: on ? userId : null };
+  await db.insert(schema.settings).values({ companyId, key: "gst_strict", value }).onConflictDoUpdate({ target: [schema.settings.companyId, schema.settings.key], set: { value } });
+  await audit(db, { companyId, userId, action: on ? "gst.strict_on" : "gst.strict_off", entityType: "settings", entityId: companyId, before, after: value });
+}
+
+/** A rule counts for checking products only once someone has confirmed it (or it's verified from an official source). */
+export const trustedRule = (r: Rule | null) => (r && (r.status === "VERIFIED" || r.status === "USER_CONFIRMED") ? r : null);
+
+/** Everything that could put a wrong GST rate on a bill. */
+export async function rateProblems(db: DB | Tx, companyId: string, day: string) {
+  const [rules, prods] = await Promise.all([db.query.gstRateRules.findMany({ where: eq(schema.gstRateRules.companyId, companyId) }),
+    db.query.products.findMany({ where: and(eq(schema.products.companyId, companyId), eq(schema.products.isActive, true)) })]);
+  const unconfirmed = prods.filter((p) => p.gstRate != null && p.gstRateStatus !== "USER_CONFIRMED");
+  const noRate = prods.filter((p) => p.gstRate == null);
+  const noHsn = prods.filter((p) => !p.hsn);
+  const ruleMismatch = prods.map((p) => ({ p, rule: trustedRule(ruleFor(rules, p.hsn, day)) })).filter((x) => x.rule && x.p.gstRate != null && !D(x.rule.rate).eq(x.p.gstRate));
+  // Same HSN code on two products but different rates: at least one is wrong.
+  const byHsn = new Map<string, typeof prods>();
+  for (const p of prods) if (p.hsn && p.gstRate != null) (byHsn.get(p.hsn) ?? byHsn.set(p.hsn, []).get(p.hsn)!).push(p);
+  const hsnConflicts = [...byHsn.entries()].filter(([, ps]) => new Set(ps.map((p) => D(p.gstRate!).toString())).size > 1)
+    .map(([hsn, ps]) => ({ hsn, rates: [...new Set(ps.map((p) => D(p.gstRate!).toString()))].map((rate) => ({ rate, products: ps.filter((p) => D(p.gstRate!).toString() === rate) })) }));
+  return { unconfirmed, noRate, noHsn, ruleMismatch, hsnConflicts, rules };
+}
+
+/** Owner confirms several product rates at once (e.g. against one supplier bill). Audited per product with where it was checked. */
+export async function confirmProductRates(db: DB, companyId: string, userId: string, ids: string[], checkedAgainst: string) {
+  if (!ids.length) throw new UserFacingError("Tick the products you've checked.");
+  if (!checkedAgainst.trim()) throw new UserFacingError("Say what you checked them against (e.g. 'SF Sonic bill 1234').");
+  const { rules } = await rateProblems(db, companyId, new Date().toISOString().slice(0, 10));
+  let n = 0;
+  for (const id of ids) {
+    const p = await db.query.products.findFirst({ where: and(eq(schema.products.id, id), eq(schema.products.companyId, companyId)) });
+    if (!p || p.gstRate == null) continue;
+    const rule = trustedRule(ruleFor(rules, p.hsn, new Date().toISOString().slice(0, 10)));
+    if (rule && !D(rule.rate).eq(p.gstRate)) throw new UserFacingError(`"${p.name}" is ${D(p.gstRate).toString()}% but your checked rate table says ${D(rule.rate).toString()}% for HSN ${rule.hsnPrefix}. Fix one of them first.`);
+    await db.update(schema.products).set({ gstRateStatus: "USER_CONFIRMED", updatedAt: new Date() }).where(eq(schema.products.id, id));
+    await audit(db, { companyId, userId, action: "product.gst_confirm", entityType: "product", entityId: id, before: { gstRateStatus: p.gstRateStatus }, after: { gstRate: p.gstRate, hsn: p.hsn, gstRateStatus: "USER_CONFIRMED" }, reason: checkedAgainst.trim() });
+    n++;
+  }
+  return n;
 }
 
 /** Starter rules researched on 29 Sep 2026 from non-government sources — deliberately marked SECONDARY_SOURCE. */

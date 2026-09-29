@@ -2,6 +2,7 @@
  * Sales invoices. One invoice = one balanced ledger entry (sales, GST, customer dues, round-off,
  * cost of goods sold, stock) + stock movements + the invoice document, all in ONE transaction.
  */
+import { gstStrict, ruleFor, trustedRule } from "./gst";
 import { randomBytes } from "node:crypto";
 import { and, eq, sql, desc, gte, lte } from "drizzle-orm";
 import Decimal from "decimal.js";
@@ -50,6 +51,7 @@ export async function createSale(db: DB, input: SaleInput) {
       const r = await tx.execute(sql`SELECT id FROM products WHERE id = ${id} AND company_id = ${input.companyId} FOR UPDATE`);
       if (!r.rows.length) throw new UserFacingError("One of the products wasn't found.");
     }
+    const [strict, rules] = await Promise.all([gstStrict(tx, input.companyId), tx.query.gstRateRules.findMany({ where: eq(schema.gstRateRules.companyId, input.companyId) })]);
     const products = new Map((await tx.query.products.findMany({ where: eq(schema.products.companyId, input.companyId) })).filter((p) => ids.includes(p.id)).map((p) => [p.id, p]));
     const stock = new Map<string, { qty: Decimal; value: Decimal }>();
     for (const id of ids) {
@@ -67,7 +69,16 @@ export async function createSale(db: DB, input: SaleInput) {
       const disc = num(l.discountPct || "0", `Line ${i + 1} discount`, 2);
       if (disc.gt(100)) throw new UserFacingError(`Line ${i + 1}: discount can't be more than 100%.`);
       if (type !== "NONE" && p.gstRate == null) throw new UserFacingError(`"${p.name}" has no GST rate. Set it on the product page first — the app won't guess tax rates.`);
-      if (type !== "NONE" && p.gstRateStatus !== "USER_CONFIRMED") warnings.push(`GST rate for "${p.name}" (${D(p.gstRate!).toString()}%) is not confirmed yet.`);
+      if (type !== "NONE" && p.gstRateStatus !== "USER_CONFIRMED") {
+        if (strict.on) throw new UserFacingError(`GST rate for "${p.name}" (${D(p.gstRate!).toString()}%) isn't confirmed, and you've turned on "only bill confirmed rates". Confirm it under GST → Rates first.`);
+        warnings.push(`GST rate for "${p.name}" (${D(p.gstRate!).toString()}%) is not confirmed yet.`);
+      }
+      const rule = type !== "NONE" ? trustedRule(ruleFor(rules, p.hsn, input.date)) : null;
+      if (rule && !D(rule.rate).eq(p.gstRate!)) {
+        const msg = `"${p.name}" is set to ${D(p.gstRate!).toString()}% but your checked rate table says ${D(rule.rate).toString()}% for HSN ${rule.hsnPrefix}.`;
+        if (strict.on) throw new UserFacingError(`${msg} Fix one of them under GST → Rates before billing.`);
+        warnings.push(msg);
+      }
       return { p, qty, rate, disc, serials: l.serials?.trim() || null };
     });
 

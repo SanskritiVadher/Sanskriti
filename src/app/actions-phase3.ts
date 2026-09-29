@@ -2,6 +2,7 @@
 import { redirect } from "next/navigation";
 import { db } from "@/db";
 import { requireContext } from "@/lib/session";
+import { can } from "@/lib/permissions";
 import { UserFacingError } from "@/lib/errors";
 import { createParty, updateParty, setPartyOpening, recordCustomerPayment, recordSupplierPayment, type PartyInput } from "@/lib/services/parties";
 import { createProduct, updateProduct, adjustStock, type AdjustReason, type ProductInput } from "@/lib/services/inventory";
@@ -70,10 +71,17 @@ const productFields = (f: FormData): ProductInput => ({
 export async function saveProductAction(f: FormData) {
   const ctx = await requireContext("inventory.adjust");
   const id = s(f, "id");
+  const fields = productFields(f);
+  // Only someone allowed to manage GST can confirm a rate. Others keep an existing confirmation only if HSN and rate are unchanged.
+  if (!can(ctx.role, "gst.configure")) {
+    const before = id ? await db.query.products.findFirst({ where: and(eq(schema.products.id, id), eq(schema.products.companyId, ctx.company.id)) }) : null;
+    fields.gstConfirmed = !!before && before.gstRateStatus === "USER_CONFIRMED" && (before.hsn ?? "") === (fields.hsn ?? "").trim()
+      && before.gstRate != null && fields.gstRate?.trim() !== "" && Number(before.gstRate) === Number(fields.gstRate);
+  }
   let p;
   try {
-    p = id ? await updateProduct(db, ctx.company.id, ctx.user.id, id, { ...productFields(f), isActive: s(f, "isActive") !== "0" })
-      : await createProduct(db, ctx.company.id, ctx.user.id, { ...productFields(f), openingQty: s(f, "openingQty"), openingRate: s(f, "openingRate"), openingDate: s(f, "openingDate") });
+    p = id ? await updateProduct(db, ctx.company.id, ctx.user.id, id, { ...fields, isActive: s(f, "isActive") !== "0" })
+      : await createProduct(db, ctx.company.id, ctx.user.id, { ...fields, openingQty: s(f, "openingQty"), openingRate: s(f, "openingRate"), openingDate: s(f, "openingDate") });
   } catch (e) { fail(id ? `/inventory/${id}/edit` : "/inventory/new", e, keepForm(f)); }
   redirect(`/inventory/${p!.id}?saved=1`);
 }

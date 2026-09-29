@@ -1,3 +1,4 @@
+import { ruleFor, trustedRule } from "@/lib/services/gst";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { and, eq } from "drizzle-orm";
@@ -24,6 +25,7 @@ export default async function Product({ params, searchParams }: { params: Promis
   const low = p.reorderLevel && s.qty.lte(p.reorderLevel);
   const margin = p.dealerPrice && s.qty.gt(0) ? D(p.dealerPrice).minus(s.avgCost) : null;
 
+  const rateRule = trustedRule(ruleFor(await db.query.gstRateRules.findMany({ where: eq(schema.gstRateRules.companyId, ctx.company.id) }), p.hsn, todayIST()));
   return <>
     <PageHeader title={p.name} subtitle={[brand?.name, p.sku, p.hsn && `HSN ${p.hsn}`].filter(Boolean).join(" · ")}
       action={can(ctx.role, "inventory.adjust") && <LinkButton href={`/inventory/${id}/edit`} variant="secondary">Edit</LinkButton>} />
@@ -45,7 +47,8 @@ export default async function Product({ params, searchParams }: { params: Promis
     <Card className="mb-6"><dl className="grid gap-2 text-[15px] sm:grid-cols-3">
       {([["Purchase price", p.purchasePrice], ["Dealer price", p.dealerPrice], ["Wholesale price", p.wholesalePrice], ["Retail price", p.retailPrice], ["MRP", p.mrp], ["Lowest allowed", p.minSellingPrice]] as const)
         .map(([l, v]) => <div key={l}><dt className="text-[13px] text-ink-3">{l}</dt><dd className="num">{v ? formatINR(v) : "—"}</dd></div>)}
-      <div><dt className="text-[13px] text-ink-3">GST rate</dt><dd>{p.gstRate ? `${D(p.gstRate).toString()}%` : "—"} {p.gstRate && (p.gstRateStatus === "USER_CONFIRMED" ? <Status tone="good">Confirmed by you</Status> : <Status tone="warn">Not confirmed</Status>)}</dd></div>
+      <div><dt className="text-[13px] text-ink-3">GST rate</dt><dd>{p.gstRate ? `${D(p.gstRate).toString()}%` : "—"} {p.gstRate && (p.gstRateStatus === "USER_CONFIRMED" ? <Status tone="good">Confirmed by you</Status> : <Status tone="warn">Not confirmed</Status>)}
+        {rateRule && p.gstRate && !D(rateRule.rate).eq(p.gstRate) && <span className="mt-1 block text-[13px] text-bad">Your checked rate table says {D(rateRule.rate).toString()}% for HSN {rateRule.hsnPrefix}. <Link className="underline" href="/gst/rates#products">Fix</Link></span>}</dd></div>
       <div><dt className="text-[13px] text-ink-3">Warranty</dt><dd>{p.warrantyMonths ? `${p.warrantyMonths} months` : "—"}</dd></div>
       <div><dt className="text-[13px] text-ink-3">Serial numbers</dt><dd>{p.trackSerial ? "Tracked" : "Not tracked"}</dd></div>
     </dl></Card>

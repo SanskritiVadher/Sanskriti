@@ -4,7 +4,7 @@ import { db } from "@/db";
 import { requireContext } from "@/lib/session";
 import { UserFacingError } from "@/lib/errors";
 import { createCreditNote, createDebitNote } from "@/lib/services/notes";
-import { import2b, addRule, confirmRule, applyRuleToProducts, recordGstPayment, STARTER_RULES } from "@/lib/services/gst";
+import { import2b, addRule, confirmRule, applyRuleToProducts, recordGstPayment, STARTER_RULES, setGstStrict, confirmProductRates } from "@/lib/services/gst";
 
 const s = (f: FormData, k: string) => String(f.get(k) ?? "");
 const msg = (e: unknown) => (e instanceof UserFacingError ? e.message : (console.error(e), "Something went wrong. Nothing was saved."));
@@ -65,4 +65,17 @@ export async function gstPaymentAction(f: FormData) {
   try { r = await recordGstPayment(db, { companyId: ctx.company.id, userId: ctx.user.id, asOf: s(f, "asOf"), paidOn: s(f, "paidOn"), bankId: s(f, "bankId"), reference: s(f, "reference") }); }
   catch (e) { redirect(`/gst/pay?period=${s(f, "period")}&error=${encodeURIComponent(msg(e))}`); }
   redirect(`/reports/entry/${r!.entry.id}?saved=1`);
+}
+
+export async function gstStrictAction(f: FormData) {
+  const ctx = await requireContext("gst.configure");
+  await setGstStrict(db, ctx.company.id, ctx.user.id, s(f, "on") === "1");
+  redirect("/gst/rates?saved=1");
+}
+export async function confirmProductRatesAction(f: FormData) {
+  const ctx = await requireContext("gst.configure");
+  let n = 0;
+  try { n = await confirmProductRates(db, ctx.company.id, ctx.user.id, f.getAll("pid").map(String), s(f, "checkedAgainst")); }
+  catch (e) { redirect(`/gst/rates?error=${encodeURIComponent(msg(e))}#products`); }
+  redirect(`/gst/rates?confirmed=${n}#products`);
 }
