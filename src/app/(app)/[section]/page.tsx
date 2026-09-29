@@ -3,8 +3,6 @@ import { requireContext } from "@/lib/session";
 import { Card, Notice, PageHeader } from "@/components/ui";
 
 const SECTIONS: Record<string, { title: string; q: string; phase: number; what: string }> = {
-  sell: { title: "Sell", q: "Create bills fast", phase: 4, what: "Fast wholesale billing with automatic GST, credit-limit and margin checks." },
-  buy: { title: "Buy", q: "Record purchases", phase: 4, what: "Purchase orders, purchase bills, returns and supplier price history." },
   gst: { title: "GST", q: "Is my GST in order?", phase: 5, what: "Your GST position, input vs output, and items needing review." },
   assistant: { title: "AI Assistant", q: "Ask anything about your business", phase: 8, what: "Answers grounded only in your own records. It will never post entries without your approval." },
 };

@@ -197,8 +197,10 @@ function amountOrThrow(v: string) {
 }
 
 /** Pre-written, polite WhatsApp reminder. Opens WhatsApp with the text filled in; the owner presses send. */
-export function whatsappReminderLink(p: { whatsapp: string | null; name: string }, businessName: string, amount: string) {
+export function whatsappReminderLink(p: { whatsapp: string | null; name: string }, businessName: string, amount: string,
+  bills: { number: string; date: string; open: string; daysOverdue: number; ageUnknown?: boolean }[] = []) {
   if (!p.whatsapp) return null;
-  const text = `Namaste ${p.name} ji,\n\nThis is a reminder from ${businessName}. Your outstanding balance with us is ${amount}.\n\nPlease arrange the payment at the earliest. If you have already paid, kindly ignore this message.\n\nThank you.`;
+  const list = bills.length ? `\n\nPending bills:\n${bills.slice(0, 8).map((b) => b.ageUnknown ? `• Previous balance: ${b.open}` : `• ${b.number} (${b.date}): ${b.open}${b.daysOverdue > 0 ? `, ${b.daysOverdue} days overdue` : ""}`).join("\n")}${bills.length > 8 ? `\n• and ${bills.length - 8} more` : ""}` : "";
+  const text = `Namaste ${p.name} ji,\n\nThis is a reminder from ${businessName}. Your outstanding balance with us is ${amount}.${list}\n\nPlease arrange the payment at the earliest. If you have already paid, kindly ignore this message.\n\nThank you.`;
   return `https://wa.me/91${p.whatsapp}?text=${encodeURIComponent(text)}`;
 }

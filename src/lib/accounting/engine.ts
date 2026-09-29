@@ -163,25 +163,28 @@ export async function postEntry(db: DB, input: PostInput) {
 
 /** Reverse a posted entry with an equal-and-opposite entry. The original stays visible, marked REVERSED. */
 export async function reverseEntry(db: DB, p: { companyId: string; userId: string; entryId: string; reason: string; date?: string }) {
-  if (!p.reason?.trim()) throw new LedgerError("Please give a reason for reversing this entry.");
-  return db.transaction(async (tx) => {
-    const locked = await tx.execute<{ id: string }>(sql`SELECT id FROM journal_entries WHERE id = ${p.entryId} AND company_id = ${p.companyId} FOR UPDATE`);
-    if (!locked.rows.length) throw new LedgerError("Entry not found.");
-    const orig = await tx.query.journalEntries.findFirst({ where: eq(schema.journalEntries.id, p.entryId) });
-    if (!orig) throw new LedgerError("Entry not found.");
-    if (orig.status === "REVERSED") throw new LedgerError(`${orig.voucherNumber} has already been reversed.`);
-    if (orig.voucherType === "REVERSAL") throw new LedgerError("A reversal can't itself be reversed. Post a fresh entry instead.");
-    const lines = await tx.query.journalLines.findMany({ where: eq(schema.journalLines.entryId, orig.id), orderBy: schema.journalLines.lineNo });
-    const rev = await postEntryTx(tx, {
-      companyId: p.companyId, userId: p.userId, voucherType: "REVERSAL", date: p.date ?? orig.entryDate,
-      narration: `Reversal of ${orig.voucherNumber}: ${p.reason.trim()}`, reversalOfId: orig.id,
-      sourceType: orig.sourceType, sourceId: orig.sourceId ?? undefined,
-      lines: lines.map((l) => ({ accountId: l.accountId, debit: l.credit, credit: l.debit, narration: l.narration ?? undefined, partyId: l.partyId ?? undefined })),
-    });
-    await tx.update(schema.journalEntries).set({ status: "REVERSED", reversedById: rev.id, reversalReason: p.reason.trim() })
-      .where(eq(schema.journalEntries.id, orig.id));
-    await audit(tx, { companyId: p.companyId, userId: p.userId, action: "ledger.reverse", entityType: "journal_entry",
-      entityId: orig.id, before: { status: "POSTED" }, after: { status: "REVERSED", reversal: rev.voucherNumber }, reason: p.reason.trim() });
-    return rev;
+  return db.transaction((tx) => reverseEntryTx(tx, p));
+}
+
+/** Same as reverseEntry, inside an existing transaction (used when cancelling invoices/bills). */
+export async function reverseEntryTx(tx: Tx, p: { companyId: string; userId: string; entryId: string; reason: string; date?: string }) {
+  if (!p.reason?.trim()) throw new LedgerError("Please give a reason.");
+  const locked = await tx.execute<{ id: string }>(sql`SELECT id FROM journal_entries WHERE id = ${p.entryId} AND company_id = ${p.companyId} FOR UPDATE`);
+  if (!locked.rows.length) throw new LedgerError("Entry not found.");
+  const orig = await tx.query.journalEntries.findFirst({ where: eq(schema.journalEntries.id, p.entryId) });
+  if (!orig) throw new LedgerError("Entry not found.");
+  if (orig.status === "REVERSED") throw new LedgerError(`${orig.voucherNumber} has already been reversed.`);
+  if (orig.voucherType === "REVERSAL") throw new LedgerError("A reversal can't itself be reversed. Post a fresh entry instead.");
+  const lines = await tx.query.journalLines.findMany({ where: eq(schema.journalLines.entryId, orig.id), orderBy: schema.journalLines.lineNo });
+  const rev = await postEntryTx(tx, {
+    companyId: p.companyId, userId: p.userId, voucherType: "REVERSAL", date: p.date ?? orig.entryDate,
+    narration: `Reversal of ${orig.voucherNumber}: ${p.reason.trim()}`, reversalOfId: orig.id,
+    sourceType: orig.sourceType, sourceId: orig.sourceId ?? undefined,
+    lines: lines.map((l) => ({ accountId: l.accountId, debit: l.credit, credit: l.debit, narration: l.narration ?? undefined, partyId: l.partyId ?? undefined })),
   });
+  await tx.update(schema.journalEntries).set({ status: "REVERSED", reversedById: rev.id, reversalReason: p.reason.trim() })
+    .where(eq(schema.journalEntries.id, orig.id));
+  await audit(tx, { companyId: p.companyId, userId: p.userId, action: "ledger.reverse", entityType: "journal_entry",
+    entityId: orig.id, before: { status: "POSTED" }, after: { status: "REVERSED", reversal: rev.voucherNumber }, reason: p.reason.trim() });
+  return rev;
 }

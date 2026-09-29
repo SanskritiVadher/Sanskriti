@@ -319,3 +319,114 @@ export const importBatches = pgTable("import_batches", {
   createdBy: uuid("created_by").notNull().references(() => users.id, { onDelete: "restrict" }),
   createdAt: ts("created_at").notNull().defaultNow(),
 });
+
+// ───────────────────────── Phase 4: sales & purchase documents ─────────────────────────
+export const docStatusEnum = pgEnum("doc_status", ["ACTIVE", "CANCELLED"]);
+export const supplyTypeEnum = pgEnum("supply_type", ["INTRA", "INTER", "NONE"]);
+
+/** Sales invoice. Its number is the ledger voucher number (gap-free). Figures are stored as issued. */
+export const salesInvoices = pgTable("sales_invoices", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "restrict" }),
+  partyId: uuid("party_id").notNull().references(() => parties.id, { onDelete: "restrict" }),
+  entryId: uuid("entry_id").notNull().references(() => journalEntries.id, { onDelete: "restrict" }),
+  number: text("number").notNull(),
+  invoiceDate: date("invoice_date").notNull(),
+  dueDate: date("due_date").notNull(),
+  docType: text("doc_type").notNull(), // TAX_INVOICE | BILL_OF_SUPPLY
+  supplyType: supplyTypeEnum("supply_type").notNull(),
+  placeOfSupply: text("place_of_supply"),
+  customerName: text("customer_name").notNull(),
+  customerGstin: text("customer_gstin"),
+  customerAddress: text("customer_address"),
+  customerPhone: text("customer_phone"),
+  subtotal: money("subtotal").notNull(),
+  discount: money("discount").notNull(),
+  taxable: money("taxable").notNull(),
+  cgst: money("cgst").notNull(),
+  sgst: money("sgst").notNull(),
+  igst: money("igst").notNull(),
+  roundOff: money("round_off").notNull(),
+  total: money("total").notNull(),
+  costOfGoods: money("cost_of_goods").notNull(),
+  paidAtSale: money("paid_at_sale").notNull().default("0"),
+  paymentEntryId: uuid("payment_entry_id").references(() => journalEntries.id, { onDelete: "restrict" }),
+  status: docStatusEnum("status").notNull().default("ACTIVE"),
+  cancelReason: text("cancel_reason"),
+  creditOverrideReason: text("credit_override_reason"),
+  notes: text("notes"),
+  shareToken: text("share_token").notNull(),
+  createdBy: uuid("created_by").notNull().references(() => users.id, { onDelete: "restrict" }),
+  createdAt: ts("created_at").notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("si_company_number_uq").on(t.companyId, t.number),
+  uniqueIndex("si_share_token_uq").on(t.shareToken),
+  index("si_company_date_idx").on(t.companyId, t.invoiceDate),
+  index("si_party_idx").on(t.companyId, t.partyId),
+]);
+
+export const salesInvoiceLines = pgTable("sales_invoice_lines", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  invoiceId: uuid("invoice_id").notNull().references(() => salesInvoices.id, { onDelete: "restrict" }),
+  lineNo: integer("line_no").notNull(),
+  productId: uuid("product_id").notNull().references(() => products.id, { onDelete: "restrict" }),
+  description: text("description").notNull(),
+  hsn: text("hsn"),
+  unit: text("unit").notNull(),
+  quantity: qty("quantity").notNull(),
+  rate: money("rate").notNull(),
+  discountPct: numeric("discount_pct", { precision: 5, scale: 2 }).notNull().default("0"),
+  taxable: money("taxable").notNull(),
+  gstRate: numeric("gst_rate", { precision: 5, scale: 2 }).notNull(),
+  cgst: money("cgst").notNull(),
+  sgst: money("sgst").notNull(),
+  igst: money("igst").notNull(),
+  lineTotal: money("line_total").notNull(),
+  unitCost: numeric("unit_cost", { precision: 18, scale: 4 }).notNull(),
+  costValue: money("cost_value").notNull(),
+  serials: text("serials"),
+});
+
+/** Supplier bill. `billNumber` is the supplier's own number; `number` is our ledger voucher number. */
+export const purchaseBills = pgTable("purchase_bills", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "restrict" }),
+  partyId: uuid("party_id").notNull().references(() => parties.id, { onDelete: "restrict" }),
+  entryId: uuid("entry_id").notNull().references(() => journalEntries.id, { onDelete: "restrict" }),
+  number: text("number").notNull(),
+  billNumber: text("bill_number").notNull(),
+  billDate: date("bill_date").notNull(),
+  dueDate: date("due_date").notNull(),
+  supplyType: supplyTypeEnum("supply_type").notNull(),
+  taxable: money("taxable").notNull(),
+  cgst: money("cgst").notNull(),
+  sgst: money("sgst").notNull(),
+  igst: money("igst").notNull(),
+  roundOff: money("round_off").notNull(),
+  total: money("total").notNull(),
+  itcClaimed: boolean("itc_claimed").notNull(),
+  status: docStatusEnum("status").notNull().default("ACTIVE"),
+  cancelReason: text("cancel_reason"),
+  notes: text("notes"),
+  createdBy: uuid("created_by").notNull().references(() => users.id, { onDelete: "restrict" }),
+  createdAt: ts("created_at").notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("pb_company_number_uq").on(t.companyId, t.number),
+  index("pb_party_billno_idx").on(t.companyId, t.partyId, t.billNumber),
+  index("pb_company_date_idx").on(t.companyId, t.billDate),
+]);
+
+export const purchaseBillLines = pgTable("purchase_bill_lines", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  billId: uuid("bill_id").notNull().references(() => purchaseBills.id, { onDelete: "restrict" }),
+  lineNo: integer("line_no").notNull(),
+  productId: uuid("product_id").notNull().references(() => products.id, { onDelete: "restrict" }),
+  quantity: qty("quantity").notNull(),
+  rate: money("rate").notNull(),
+  taxable: money("taxable").notNull(),
+  gstRate: numeric("gst_rate", { precision: 5, scale: 2 }).notNull(),
+  cgst: money("cgst").notNull(),
+  sgst: money("sgst").notNull(),
+  igst: money("igst").notNull(),
+  unitCost: numeric("unit_cost", { precision: 18, scale: 4 }).notNull(),
+});

@@ -5,6 +5,7 @@ import { requireContext } from "@/lib/session";
 import { stateByCode } from "@/lib/gst/states";
 import { Card, Notice, PageHeader, Status } from "@/components/ui";
 import { moneyPosition } from "@/lib/accounting/reports";
+import { attentionItems, salesChange } from "@/lib/services/attention";
 import { partyBalances } from "@/lib/services/parties";
 import { stockList } from "@/lib/services/inventory";
 import { D } from "@/lib/money";
@@ -34,6 +35,9 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ w
   const toPay = [...supBal.values()].filter((b) => b.balance.gt(0)).reduce((s, b) => s.plus(b.balance), D(0));
   const stockValue = stock.filter((r) => r.isActive).reduce((s, r) => s.plus(r.value), D(0));
   const lowCount = stock.filter((r) => r.isActive && (r.status === "LOW" || r.status === "OUT")).length;
+  const [attention, change] = await Promise.all([attentionItems(db, c.id), salesChange(db, c.id)]);
+  const pct = (a: typeof change.now.sales, b: typeof change.now.sales) => (b.isZero() ? null : a.minus(b).div(b).mul(100));
+  const salesPct = pct(change.now.sales, change.prev.sales), profitPct = pct(change.now.profit, change.prev.profit);
   const tiles = [
     { label: "Cash and bank", value: money.total, note: "Money you can use today", href: "/money" },
     { label: "Customers owe you", value: collectTotal, note: toCollect.length ? `${toCollect.length} customer${toCollect.length === 1 ? "" : "s"}` : "Nothing due", href: "/customers" },
@@ -62,10 +66,29 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ w
           <p className="text-[13px] text-ink-2">{t.label}</p>
           <p className="num text-[24px] font-semibold">{formatINRShort(t.value)}</p>
           <p className={`text-[13px] ${t.warn ? "text-warn" : "text-ink-3"}`}>{t.warn ? "⚠ " : ""}{t.note}</p></Link>)}</div>}
-      <p className="mt-4 text-ink-2">Sales and purchases aren&rsquo;t recorded yet (billing arrives in Phase 4), so there&rsquo;s no profit or sales trend to explain yet.
-        Once billing is live, this space will tell you how sales, profit, cash, dues and stock are moving, and why.</p>
-      <p className="mt-3 text-[13px] text-ink-3">We never show made-up numbers here. Every figure will come from your own records.</p>
+      <p className="mt-3 text-[13px] text-ink-3">Every figure comes from your own records. Click any box to see where it comes from.</p>
     </Card>
+
+    <Card className="mb-6">
+      <h2 className="text-[18px] font-semibold">What needs your attention</h2>
+      {attention.length === 0 ? <p className="mt-2"><Status tone="good">Nothing urgent right now.</Status></p> :
+      <ul className="mt-3 space-y-3">{attention.slice(0, 7).map((a) => <li key={a.what} className="flex flex-wrap items-start justify-between gap-3 rounded-xl bg-surface-2 px-4 py-3">
+        <div className="max-w-2xl"><p className="font-medium"><span aria-hidden className={a.tone === "bad" ? "text-bad" : a.tone === "warn" ? "text-warn" : "text-info"}>{a.tone === "info" ? "ℹ" : "⚠"} </span>{a.what}</p>
+          <p className="text-[14px] text-ink-2">{a.why} <span className="text-ink">{a.action}</span></p></div>
+        <Link href={a.href} className="rounded-lg border border-line bg-surface px-3 py-1.5 text-[14px]">{a.cta}</Link></li>)}</ul>}
+    </Card>
+
+    {change.hasData && <Card className="mb-6">
+      <h2 className="text-[18px] font-semibold">What changed this month</h2>
+      <p className="mt-1 text-[13px] text-ink-3">First {change.days} days of this month vs the same days last month. Sales before GST.</p>
+      <ul className="mt-3 space-y-2">
+        <li>Sales: <b className="num">{formatINRShort(change.now.sales)}</b>{salesPct ? <> — {salesPct.gte(0) ? "up" : "down"} <b>{salesPct.abs().toFixed(0)}%</b> from {formatINRShort(change.prev.sales)}</> : " (no sales in the same days last month to compare)"}</li>
+        <li>Profit before expenses: <b className="num">{formatINRShort(change.now.profit)}</b>{profitPct ? <> — {profitPct.gte(0) ? "up" : "down"} {profitPct.abs().toFixed(0)}%</> : ""}
+          {change.now.sales.gt(0) && <span className="text-ink-2"> · margin {change.now.profit.div(change.now.sales).mul(100).toFixed(1)}%{change.prev.sales.gt(0) && ` (was ${change.prev.profit.div(change.prev.sales).mul(100).toFixed(1)}%)`}</span>}</li>
+        {change.brands.filter((b) => !b.change.isZero()).slice(0, 2).map((b) => <li key={b.brand} className="text-ink-2">{b.brand} sales {b.change.gt(0) ? "rose" : "fell"} by {formatINRShort(b.change.abs())}.</li>)}
+      </ul>
+      {salesPct && profitPct && salesPct.gt(0) && profitPct.lt(salesPct.minus(5)) && <p className="mt-3"><Status tone="warn">Sales are growing faster than profit — margins are thinner. Check prices and purchase costs.</Status></p>}
+    </Card>}
 
     <div className="grid gap-6 md:grid-cols-2">
       <Card>

@@ -9,8 +9,8 @@ import { getViewMode } from "@/lib/view-mode";
 
 const NAV = [
   { href: "/home", label: "Home", phase: 1 },
-  { href: "/sell", label: "Sell", phase: 4 },
-  { href: "/buy", label: "Buy", phase: 4 },
+  { href: "/sell", label: "Sell", phase: 1 },
+  { href: "/buy", label: "Buy", phase: 1 },
   { href: "/inventory", label: "Inventory", phase: 1 },
   { href: "/money", label: "Money", phase: 1 },
   { href: "/customers", label: "Customers", phase: 1 },

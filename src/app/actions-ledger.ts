@@ -3,7 +3,8 @@ import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { db, schema } from "@/db";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
+import { cashPaymentWarnings } from "@/lib/services/sales";
 import { requireContext } from "@/lib/session";
 import { postEntry, reverseEntry } from "@/lib/accounting/engine";
 import { recordReceipt, recordPayment, recordContra, setOpeningBalances } from "@/lib/services/vouchers";
@@ -30,9 +31,14 @@ export async function recordMoneyAction(f: FormData) {
   const base = { companyId: ctx.company.id, userId: ctx.user.id, date: s(f, "date"), amount: s(f, "amount"), narration: s(f, "narration") };
   const keep = { type, amount: s(f, "amount"), narration: s(f, "narration"), date: s(f, "date") };
   let entry;
+  let cashWarn: string[] = [];
   try {
     if (type === "receipt") entry = await recordReceipt(db, { ...base, cashBankId: s(f, "cashBankId"), fromAccountId: s(f, "otherId") });
     else if (type === "payment") entry = await recordPayment(db, { ...base, cashBankId: s(f, "cashBankId"), toAccountId: s(f, "otherId") });
+    if (type === "payment") {
+      const cash = await db.query.accounts.findFirst({ where: and(eq(schema.accounts.id, s(f, "cashBankId")), eq(schema.accounts.systemKey, "CASH")) });
+      if (cash) cashWarn = await cashPaymentWarnings(db, ctx.company.id, s(f, "date"), s(f, "amount").replace(/[,₹\s]/g, "") || "0");
+    }
     else if (type === "contra") entry = await recordContra(db, { ...base, fromId: s(f, "fromId"), toId: s(f, "toId") });
     else if (type === "journal") {
       const lines = [];
@@ -44,7 +50,7 @@ export async function recordMoneyAction(f: FormData) {
       entry = await postEntry(db, { companyId: ctx.company.id, userId: ctx.user.id, voucherType: "JOURNAL", date: s(f, "date"), narration: s(f, "narration"), lines });
     } else throw new UserFacingError("Unknown entry type.");
   } catch (e) { fail(`/money/new`, e, keep); }
-  redirect(`/reports/entry/${entry!.id}?saved=1`);
+  redirect(`/reports/entry/${entry!.id}?saved=1${cashWarn.length ? `&w=${encodeURIComponent(JSON.stringify(cashWarn))}` : ""}`);
 }
 
 export async function reverseEntryAction(f: FormData) {

@@ -10,7 +10,7 @@ import { getViewMode } from "@/lib/view-mode";
 import { Button, Card, Field, Input, Notice, PageHeader, Status } from "@/components/ui";
 import { reverseEntryAction } from "../../../../actions-ledger";
 
-export default async function Entry({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ saved?: string; reversed?: string; error?: string }> }) {
+export default async function Entry({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ saved?: string; reversed?: string; error?: string; w?: string }> }) {
   const ctx = await requireContext("view.dashboard");
   const { id } = await params;
   const sp = await searchParams;
@@ -23,6 +23,7 @@ export default async function Entry({ params, searchParams }: { params: Promise<
   return <>
     <PageHeader title={e.narration || e.voucherNumber} subtitle={`${e.voucherNumber} · ${fmtDate(e.entryDate)}`} />
     {sp.saved && <div className="mb-4"><Notice tone="good" title="Saved. Your books are updated." /></div>}
+    {sp.w && (() => { try { return (JSON.parse(sp.w) as string[]).map((w) => <div key={w} className="mb-4"><Notice tone="warn" title={w} /></div>); } catch { return null; } })()}
     {sp.reversed && <div className="mb-4"><Notice tone="good" title="Cancelled. This reversal entry undoes the original; both stay on record." /></div>}
     {sp.error && <div className="mb-4"><Notice tone="bad" title={sp.error} /></div>}
     {e.status === "REVERSED" && d.relatedEntry && <div className="mb-4"><Notice tone="warn" title="This entry was cancelled.">

@@ -8,6 +8,7 @@ import { createProduct, updateProduct, adjustStock, type AdjustReason, type Prod
 import { createPreview, confirmImport, type ImportKind } from "@/lib/services/importer";
 import { moveCategory, unpaidBill, ownerMoney, depreciation } from "@/lib/services/corrections";
 import { addBrand } from "@/lib/services/company";
+import { cashPaymentWarnings, cashReceiptWarnings } from "@/lib/services/sales";
 import { schema } from "@/db";
 import { and, eq } from "drizzle-orm";
 
@@ -50,9 +51,13 @@ export async function partyPaymentAction(f: FormData) {
   const ctx = await requireContext("money.record");
   const id = s(f, "id"), type = s(f, "type");
   const args = { companyId: ctx.company.id, userId: ctx.user.id, partyId: id, cashBankId: s(f, "cashBankId"), amount: s(f, "amount"), date: s(f, "date"), narration: s(f, "narration") };
-  try { if (type === "SUPPLIER") await recordSupplierPayment(db, args); else await recordCustomerPayment(db, args); }
-  catch (e) { fail(`${base(type)}/${id}`, e, { amount: s(f, "amount") }); }
-  redirect(`${base(type)}/${id}?paid=1`);
+  let warnings: string[] = [];
+  try {
+    if (type === "SUPPLIER") await recordSupplierPayment(db, args); else await recordCustomerPayment(db, args);
+    const cash = await db.query.accounts.findFirst({ where: and(eq(schema.accounts.id, args.cashBankId), eq(schema.accounts.systemKey, "CASH")) });
+    if (cash) warnings = type === "SUPPLIER" ? await cashPaymentWarnings(db, ctx.company.id, args.date, args.amount, id) : await cashReceiptWarnings(db, ctx.company.id, id, args.date);
+  } catch (e) { fail(`${base(type)}/${id}`, e, { amount: s(f, "amount") }); }
+  redirect(`${base(type)}/${id}?paid=1${warnings.length ? `&w=${encodeURIComponent(JSON.stringify(warnings))}` : ""}`);
 }
 
 const productFields = (f: FormData): ProductInput => ({
