@@ -1,0 +1,53 @@
+# BizOS — business operating system for a wholesale dealership
+
+Owner-first accounting, GST, billing and inventory for an Indian wholesale business (starting with SF Sonic and Usha).
+
+**Status: Phase 1 of 10.** Setup, database, login and roles, design system, company setup wizard, default chart of accounts.
+Sections that aren't built yet say so plainly. They never show sample numbers.
+
+## Stack
+Next.js 15 (App Router, TypeScript), Tailwind CSS 4, PostgreSQL, Drizzle ORM, decimal.js for all money, bcrypt + signed JWT cookie for login, Vitest.
+
+## Run it on your computer
+Requires Node.js 20+ and a Postgres database (a free Neon database works fine for local use too).
+
+```bash
+npm install
+cp .env.example .env        # then fill in DATABASE_URL and AUTH_SECRET
+npm run db:migrate          # creates the tables
+npm run dev                 # open http://localhost:3000
+```
+
+## Tests
+Tests need a separate database whose name ends in `_test`. They wipe it on every run.
+
+```bash
+TEST_DATABASE_URL="postgresql://.../bizos_test" npm test
+```
+
+## Deploy (GitHub + Vercel + Neon)
+1. Push this folder to a new **private** GitHub repo.
+2. Create a free Postgres database at neon.tech and copy its connection string.
+3. In Vercel: **Add New → Project →** import the repo.
+4. Before clicking Deploy, add Environment Variables: `DATABASE_URL` and `AUTH_SECRET`.
+5. Deploy. The `vercel-build` script runs database migrations first, then builds the app.
+6. Check `https://<your-app>.vercel.app/api/health`. It should say `"database":"ok"`.
+
+## Project layout
+```
+drizzle/                   SQL migrations (generated, committed)
+scripts/migrate.ts         applies migrations
+src/db/schema.ts           database tables
+src/lib/accounting/        chart of accounts (posting engine arrives in Phase 2)
+src/lib/gst/               GST state codes, GSTIN validation
+src/lib/services/          business logic (all writes are audited)
+src/lib/permissions.ts     role → permission matrix
+src/app/                   pages and server actions
+tests/                     unit + database tests
+```
+
+## Principles enforced in code
+- Money is `numeric(18,2)` in the DB and `decimal.js` in code, never JavaScript floats.
+- Every write goes through a service that records an audit log entry with before/after values.
+- Money-related records are never hard-deleted (foreign keys use `ON DELETE RESTRICT`).
+- A GSTIN is checked offline for format, state code and check digit. The UI says clearly that this is **not** live portal verification.

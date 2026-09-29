@@ -1,0 +1,80 @@
+/**
+ * Default chart of accounts for an Indian GST-registered wholesale trading business.
+ * Perpetual inventory: purchases go to Stock, sales move cost to Cost of Goods Sold.
+ * `key` values are stable identifiers the posting engine (Phase 2+) uses — never rename them.
+ */
+type Nature = "ASSET" | "LIABILITY" | "EQUITY" | "INCOME" | "EXPENSE";
+
+export type GroupDef = { code: string; name: string; ownerLabel: string; nature: Nature; parent?: string };
+export type AccountDef = { code: string; name: string; ownerLabel: string; group: string; key: string };
+
+export const DEFAULT_GROUPS: GroupDef[] = [
+  { code: "1000", name: "Assets", ownerLabel: "What the business owns", nature: "ASSET" },
+  { code: "1100", name: "Current Assets", ownerLabel: "Money and things that turn into money soon", nature: "ASSET", parent: "1000" },
+  { code: "1110", name: "Cash-in-hand", ownerLabel: "Cash", nature: "ASSET", parent: "1100" },
+  { code: "1120", name: "Bank Accounts", ownerLabel: "Money in bank", nature: "ASSET", parent: "1100" },
+  { code: "1130", name: "Sundry Debtors", ownerLabel: "Money customers owe you", nature: "ASSET", parent: "1100" },
+  { code: "1140", name: "Stock-in-hand", ownerLabel: "Value of your stock", nature: "ASSET", parent: "1100" },
+  { code: "1150", name: "Duties & Taxes (Input)", ownerLabel: "GST you paid on purchases (can be claimed)", nature: "ASSET", parent: "1100" },
+  { code: "1160", name: "Loans & Advances (Asset)", ownerLabel: "Advances you have given", nature: "ASSET", parent: "1100" },
+  { code: "1200", name: "Fixed Assets", ownerLabel: "Long-term things the business owns", nature: "ASSET", parent: "1000" },
+  { code: "2000", name: "Liabilities", ownerLabel: "What the business owes", nature: "LIABILITY" },
+  { code: "2100", name: "Current Liabilities", ownerLabel: "Payments due soon", nature: "LIABILITY", parent: "2000" },
+  { code: "2110", name: "Sundry Creditors", ownerLabel: "Money you owe suppliers", nature: "LIABILITY", parent: "2100" },
+  { code: "2120", name: "Duties & Taxes (Output)", ownerLabel: "GST you collected (to be paid to government)", nature: "LIABILITY", parent: "2100" },
+  { code: "2130", name: "Provisions & Other Payables", ownerLabel: "Other bills due", nature: "LIABILITY", parent: "2100" },
+  { code: "2200", name: "Loans (Liability)", ownerLabel: "Loans taken", nature: "LIABILITY", parent: "2000" },
+  { code: "3000", name: "Capital Account", ownerLabel: "Owner's money in the business", nature: "EQUITY" },
+  { code: "4000", name: "Income", ownerLabel: "Money earned", nature: "INCOME" },
+  { code: "4100", name: "Sales Accounts", ownerLabel: "Sales", nature: "INCOME", parent: "4000" },
+  { code: "4200", name: "Indirect Income", ownerLabel: "Other income", nature: "INCOME", parent: "4000" },
+  { code: "5000", name: "Expenses", ownerLabel: "Money spent", nature: "EXPENSE" },
+  { code: "5100", name: "Cost of Goods Sold", ownerLabel: "Cost of what you sold", nature: "EXPENSE", parent: "5000" },
+  { code: "5200", name: "Direct Expenses", ownerLabel: "Costs of getting stock in", nature: "EXPENSE", parent: "5000" },
+  { code: "5300", name: "Indirect Expenses", ownerLabel: "Running costs", nature: "EXPENSE", parent: "5000" },
+];
+
+export const DEFAULT_ACCOUNTS: AccountDef[] = [
+  { code: "1111", name: "Cash", ownerLabel: "Cash in hand", group: "1110", key: "CASH" },
+  { code: "1131", name: "Sundry Debtors Control", ownerLabel: "Customers (total owed to you)", group: "1130", key: "DEBTORS_CONTROL" },
+  { code: "1141", name: "Stock-in-hand", ownerLabel: "Stock value", group: "1140", key: "INVENTORY" },
+  { code: "1151", name: "Input CGST", ownerLabel: "GST paid on purchases – Central", group: "1150", key: "INPUT_CGST" },
+  { code: "1152", name: "Input SGST", ownerLabel: "GST paid on purchases – State", group: "1150", key: "INPUT_SGST" },
+  { code: "1153", name: "Input IGST", ownerLabel: "GST paid on purchases – Interstate", group: "1150", key: "INPUT_IGST" },
+  { code: "1154", name: "Input UTGST", ownerLabel: "GST paid on purchases – Union Territory", group: "1150", key: "INPUT_UTGST" },
+  { code: "1155", name: "Input Cess", ownerLabel: "Cess paid on purchases", group: "1150", key: "INPUT_CESS" },
+  { code: "1161", name: "Advances to Suppliers", ownerLabel: "Advance paid to suppliers", group: "1160", key: "SUPPLIER_ADVANCES" },
+  { code: "1201", name: "Furniture & Equipment", ownerLabel: "Furniture & equipment", group: "1200", key: "FIXED_FURNITURE" },
+  { code: "1202", name: "Vehicles", ownerLabel: "Vehicles", group: "1200", key: "FIXED_VEHICLES" },
+  { code: "2111", name: "Sundry Creditors Control", ownerLabel: "Suppliers (total you owe)", group: "2110", key: "CREDITORS_CONTROL" },
+  { code: "2121", name: "Output CGST", ownerLabel: "GST collected – Central", group: "2120", key: "OUTPUT_CGST" },
+  { code: "2122", name: "Output SGST", ownerLabel: "GST collected – State", group: "2120", key: "OUTPUT_SGST" },
+  { code: "2123", name: "Output IGST", ownerLabel: "GST collected – Interstate", group: "2120", key: "OUTPUT_IGST" },
+  { code: "2124", name: "Output UTGST", ownerLabel: "GST collected – Union Territory", group: "2120", key: "OUTPUT_UTGST" },
+  { code: "2125", name: "Output Cess", ownerLabel: "Cess collected", group: "2120", key: "OUTPUT_CESS" },
+  { code: "2131", name: "Advances from Customers", ownerLabel: "Advance received from customers", group: "2130", key: "CUSTOMER_ADVANCES" },
+  { code: "2132", name: "Expenses Payable", ownerLabel: "Expenses not yet paid", group: "2130", key: "EXPENSES_PAYABLE" },
+  { code: "2201", name: "Bank Loan", ownerLabel: "Bank loan", group: "2200", key: "BANK_LOAN" },
+  { code: "3001", name: "Capital", ownerLabel: "Owner's capital", group: "3000", key: "CAPITAL" },
+  { code: "3002", name: "Drawings", ownerLabel: "Money taken out by owner", group: "3000", key: "DRAWINGS" },
+  { code: "3003", name: "Opening Balance Equity", ownerLabel: "Opening balances (setup)", group: "3000", key: "OPENING_BALANCE_EQUITY" },
+  { code: "3004", name: "Retained Earnings", ownerLabel: "Past profits kept in business", group: "3000", key: "RETAINED_EARNINGS" },
+  { code: "4101", name: "Sales", ownerLabel: "Sales", group: "4100", key: "SALES" },
+  { code: "4102", name: "Sales Returns", ownerLabel: "Goods returned by customers", group: "4100", key: "SALES_RETURNS" },
+  { code: "4201", name: "Discount Received", ownerLabel: "Discounts from suppliers", group: "4200", key: "DISCOUNT_RECEIVED" },
+  { code: "4202", name: "Other Income", ownerLabel: "Other income", group: "4200", key: "OTHER_INCOME" },
+  { code: "5101", name: "Cost of Goods Sold", ownerLabel: "Cost of goods sold", group: "5100", key: "COGS" },
+  { code: "5102", name: "Stock Adjustments", ownerLabel: "Stock damaged / lost / corrected", group: "5100", key: "STOCK_ADJUSTMENT" },
+  { code: "5201", name: "Freight Inward", ownerLabel: "Transport on purchases", group: "5200", key: "FREIGHT_INWARD" },
+  { code: "5301", name: "Rent", ownerLabel: "Rent", group: "5300", key: "RENT" },
+  { code: "5302", name: "Salaries & Wages", ownerLabel: "Staff salaries", group: "5300", key: "SALARIES" },
+  { code: "5303", name: "Electricity", ownerLabel: "Electricity", group: "5300", key: "ELECTRICITY" },
+  { code: "5304", name: "Transport Outward", ownerLabel: "Delivery / transport on sales", group: "5300", key: "FREIGHT_OUTWARD" },
+  { code: "5305", name: "Bank Charges", ownerLabel: "Bank charges", group: "5300", key: "BANK_CHARGES" },
+  { code: "5306", name: "Discount Allowed", ownerLabel: "Discounts given to customers", group: "5300", key: "DISCOUNT_ALLOWED" },
+  { code: "5307", name: "Telephone & Internet", ownerLabel: "Phone & internet", group: "5300", key: "TELEPHONE" },
+  { code: "5308", name: "Office Expenses", ownerLabel: "Office expenses", group: "5300", key: "OFFICE_EXPENSES" },
+  { code: "5309", name: "Round Off", ownerLabel: "Invoice rounding", group: "5300", key: "ROUND_OFF" },
+  { code: "5310", name: "Interest on Loan", ownerLabel: "Loan interest", group: "5300", key: "INTEREST_EXPENSE" },
+  { code: "5311", name: "Depreciation", ownerLabel: "Wear and tear of assets", group: "5300", key: "DEPRECIATION" },
+];
