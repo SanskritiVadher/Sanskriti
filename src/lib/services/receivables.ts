@@ -20,32 +20,37 @@ export async function openItems(db: DB, companyId: string, partyId: string, asOf
   const party = await db.query.parties.findFirst({ where: and(eq(schema.parties.id, partyId), eq(schema.parties.companyId, companyId)) });
   if (!party) return null;
   const C = party.type === "CUSTOMER";
+  // `target` = the document a credit belongs to (a return or a payment made with that bill), settled first.
   const rows = await db.execute<{ entry_id: string; date: string; created_at: string; vnum: string; source_type: string; dr: string; cr: string;
-    inv_id: string | null; inv_due: string | null; inv_no: string | null; bill_id: string | null; bill_due: string | null; bill_no: string | null }>(sql`
+    inv_id: string | null; inv_due: string | null; inv_no: string | null; bill_id: string | null; bill_due: string | null; bill_no: string | null; target: string | null }>(sql`
     SELECT e.id AS entry_id, e.entry_date AS date, e.created_at, e.voucher_number AS vnum, e.source_type,
       sum(l.debit) AS dr, sum(l.credit) AS cr,
-      si.id AS inv_id, si.due_date AS inv_due, si.number AS inv_no, pb.id AS bill_id, pb.due_date AS bill_due, pb.bill_number AS bill_no
+      si.id AS inv_id, si.due_date AS inv_due, si.number AS inv_no, pb.id AS bill_id, pb.due_date AS bill_due, pb.bill_number AS bill_no,
+      coalesce(gn.invoice_id, gn.bill_id,
+        CASE WHEN e.source_type IN ('sales_payment','purchase_payment') THEN e.source_id::uuid END) AS target
     FROM journal_lines l JOIN journal_entries e ON e.id = l.entry_id
     LEFT JOIN sales_invoices si ON si.entry_id = e.id
     LEFT JOIN purchase_bills pb ON pb.entry_id = e.id
+    LEFT JOIN gst_notes gn ON gn.entry_id = e.id
     WHERE l.company_id = ${companyId} AND l.party_id = ${partyId} AND e.status = 'POSTED' AND e.reversal_of_id IS NULL AND e.entry_date <= ${asOf}
-    GROUP BY e.id, si.id, pb.id ORDER BY e.entry_date, e.created_at`);
+    GROUP BY e.id, si.id, pb.id, gn.id ORDER BY e.entry_date, e.created_at`);
   // For customers, debits raise what they owe; for suppliers, credits raise what we owe.
   const items: OpenItem[] = [];
-  const credits: { date: string; amount: Decimal }[] = [];
+  const credits: { date: string; amount: Decimal; target: string | null }[] = [];
   for (const r of rows.rows) {
     const up = D(C ? r.dr : r.cr).minus(C ? r.cr : r.dr);
     if (up.gt(0)) {
       const kind = r.inv_id ? "INVOICE" : r.bill_id ? "BILL" : r.source_type === "opening_party" ? "OPENING" : "OTHER";
       items.push({ entryId: r.entry_id, docId: r.inv_id ?? r.bill_id, number: r.inv_no ?? (r.bill_no ? `Bill ${r.bill_no}` : kind === "OPENING" ? "Old balance" : r.vnum),
         date: r.date, dueDate: r.inv_due ?? r.bill_due ?? r.date, amount: up, open: up, daysOverdue: 0, ageUnknown: kind === "OPENING", settledOn: null, kind });
-    } else if (up.lt(0)) credits.push({ date: r.date, amount: up.neg() });
+    } else if (up.lt(0)) credits.push({ date: r.date, amount: up.neg(), target: r.target });
   }
   // FIFO: each credit (in date order) pays the oldest open items.
   let advance = D(0);
   for (const c of credits) {
     let left = c.amount;
-    for (const it of items) {
+    const own = c.target ? items.filter((i) => i.docId === c.target) : [];
+    for (const it of [...own, ...items.filter((i) => !own.includes(i))]) {
       if (left.lte(0)) break;
       if (it.open.lte(0)) continue;
       const take = Decimal.min(left, it.open);

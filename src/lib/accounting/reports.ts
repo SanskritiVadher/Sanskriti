@@ -139,7 +139,12 @@ export async function ledgerHealth(db: DB, companyId: string) {
   const negStock = await db.execute<{ name: string }>(sql`
     SELECT p.name FROM products p JOIN inventory_transactions t ON t.product_id = p.id
     WHERE p.company_id = ${companyId} GROUP BY p.id HAVING sum(t.quantity) < 0`);
+  const { gstReconciliation } = await import("@/lib/services/gst");
+  const g = await gstReconciliation(db, companyId);
   return [
+    { name: "GST in the books matches bills and invoices", ok: g.ok,
+      detail: g.ok ? `GST collected ${formatINR(g.docsOut)} and GST paid on purchases ${formatINR(g.docsIn)} agree with the accounts.`
+        : `Documents: collected ${formatINR(g.docsOut)}, paid ${formatINR(g.docsIn)}. Accounts: ${formatINR(g.ledgerOut)} / ${formatINR(g.ledgerIn)}. A manual entry may have touched a GST account.` },
     { name: "Stock value matches the books", ok: stockV.eq(ledgerV),
       detail: stockV.eq(ledgerV) ? `Stock on hand is worth ${formatINR(stockV)}, same as in the accounts.` : `Stock records say ${formatINR(stockV)} but accounts say ${formatINR(ledgerV)}.` },
     { name: "No product below zero", ok: negStock.rows.length === 0,

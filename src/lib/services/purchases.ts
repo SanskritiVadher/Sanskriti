@@ -119,6 +119,8 @@ export async function cancelBill(db: DB, p: { companyId: string; userId: string;
     if (!lock.rows.length) throw new UserFacingError("Bill not found.");
     const b = (await tx.query.purchaseBills.findFirst({ where: eq(schema.purchaseBills.id, p.billId) }))!;
     if (b.status === "CANCELLED") throw new UserFacingError("This bill is already cancelled.");
+    const ret = await tx.query.gstNotes.findFirst({ where: eq(schema.gstNotes.billId, b.id) });
+    if (ret) throw new UserFacingError(`Some goods from this bill were already returned (${ret.number}), so it can't be cancelled. Use "Return goods to supplier" for the rest.`);
     const moves = await tx.query.inventoryTransactions.findMany({ where: and(eq(schema.inventoryTransactions.sourceType, "purchase_bill"), eq(schema.inventoryTransactions.sourceId, b.id)) });
     for (const m of moves) {
       await tx.execute(sql`SELECT id FROM products WHERE id = ${m.productId} FOR UPDATE`);

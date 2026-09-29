@@ -203,6 +203,8 @@ export async function cancelSale(db: DB, p: { companyId: string; userId: string;
     if (!lock.rows.length) throw new UserFacingError("Invoice not found.");
     const inv = (await tx.query.salesInvoices.findFirst({ where: eq(schema.salesInvoices.id, p.invoiceId) }))!;
     if (inv.status === "CANCELLED") throw new UserFacingError("This invoice is already cancelled.");
+    const ret = await tx.query.gstNotes.findFirst({ where: eq(schema.gstNotes.invoiceId, inv.id) });
+    if (ret) throw new UserFacingError(`Goods on this invoice were already returned (${ret.number}), so it can't be cancelled. Use "Goods returned" for the rest.`);
     await reverseEntryTx(tx, { companyId: p.companyId, userId: p.userId, entryId: inv.entryId, reason: `Invoice ${inv.number} cancelled: ${p.reason.trim()}` });
     const moves = await tx.query.inventoryTransactions.findMany({ where: and(eq(schema.inventoryTransactions.sourceType, "sales_invoice"), eq(schema.inventoryTransactions.sourceId, inv.id)) });
     if (moves.length) await tx.insert(schema.inventoryTransactions).values(moves.map((m) => ({

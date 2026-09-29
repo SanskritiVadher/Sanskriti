@@ -430,3 +430,79 @@ export const purchaseBillLines = pgTable("purchase_bill_lines", {
   igst: money("igst").notNull(),
   unitCost: numeric("unit_cost", { precision: 18, scale: 4 }).notNull(),
 });
+
+// ───────────────────────── Phase 5: GST ─────────────────────────
+/** VERIFIED = checked against an official notification by owner/CA; USER_CONFIRMED = owner/CA confirmed;
+ *  SECONDARY_SOURCE = from a reputable non-government source; UNVERIFIED = no source. Never auto-upgraded. */
+export const ruleStatusEnum = pgEnum("gst_rule_status", ["VERIFIED", "USER_CONFIRMED", "SECONDARY_SOURCE", "UNVERIFIED"]);
+export const noteKindEnum = pgEnum("gst_note_kind", ["CREDIT_NOTE", "DEBIT_NOTE"]);
+
+export const gstRateRules = pgTable("gst_rate_rules", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "restrict" }),
+  hsnPrefix: text("hsn_prefix").notNull(),
+  description: text("description").notNull(),
+  rate: numeric("rate", { precision: 5, scale: 2 }).notNull(),
+  effectiveFrom: date("effective_from").notNull(),
+  effectiveTo: date("effective_to"),
+  status: ruleStatusEnum("status").notNull(),
+  sourceName: text("source_name"),
+  sourceUrl: text("source_url"),
+  retrievedOn: date("retrieved_on"),
+  notes: text("notes"),
+  confirmedBy: uuid("confirmed_by").references(() => users.id, { onDelete: "restrict" }),
+  confirmedAt: ts("confirmed_at"),
+  createdAt: ts("created_at").notNull().defaultNow(),
+}, (t) => [index("gst_rules_company_hsn_idx").on(t.companyId, t.hsnPrefix)]);
+
+/** Credit note (goods returned by a customer) or debit note (goods returned to a supplier). */
+export const gstNotes = pgTable("gst_notes", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "restrict" }),
+  kind: noteKindEnum("kind").notNull(),
+  partyId: uuid("party_id").notNull().references(() => parties.id, { onDelete: "restrict" }),
+  invoiceId: uuid("invoice_id").references(() => salesInvoices.id, { onDelete: "restrict" }),
+  billId: uuid("bill_id").references(() => purchaseBills.id, { onDelete: "restrict" }),
+  entryId: uuid("entry_id").notNull().references(() => journalEntries.id, { onDelete: "restrict" }),
+  number: text("number").notNull(),
+  noteDate: date("note_date").notNull(),
+  reason: text("reason").notNull(),
+  supplyType: supplyTypeEnum("supply_type").notNull(),
+  taxable: money("taxable").notNull(),
+  cgst: money("cgst").notNull(),
+  sgst: money("sgst").notNull(),
+  igst: money("igst").notNull(),
+  roundOff: money("round_off").notNull(),
+  total: money("total").notNull(),
+  costValue: money("cost_value").notNull(),
+  createdBy: uuid("created_by").notNull().references(() => users.id, { onDelete: "restrict" }),
+  createdAt: ts("created_at").notNull().defaultNow(),
+}, (t) => [uniqueIndex("gst_notes_company_number_uq").on(t.companyId, t.number), index("gst_notes_company_date_idx").on(t.companyId, t.noteDate)]);
+
+export const gstNoteLines = pgTable("gst_note_lines", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  noteId: uuid("note_id").notNull().references(() => gstNotes.id, { onDelete: "restrict" }),
+  lineNo: integer("line_no").notNull(),
+  productId: uuid("product_id").notNull().references(() => products.id, { onDelete: "restrict" }),
+  sourceLineId: uuid("source_line_id").notNull(),
+  quantity: qty("quantity").notNull(),
+  rate: money("rate").notNull(),
+  taxable: money("taxable").notNull(),
+  gstRate: numeric("gst_rate", { precision: 5, scale: 2 }).notNull(),
+  cgst: money("cgst").notNull(),
+  sgst: money("sgst").notNull(),
+  igst: money("igst").notNull(),
+  unitCost: numeric("unit_cost", { precision: 18, scale: 4 }).notNull(),
+  costValue: money("cost_value").notNull(),
+});
+
+/** GSTR-2B (or 2A) JSON the owner downloaded from the GST portal, parsed for matching. */
+export const gstr2bImports = pgTable("gstr2b_imports", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "restrict" }),
+  period: text("period").notNull(), // YYYY-MM
+  fileName: text("file_name").notNull(),
+  docs: jsonb("docs").notNull(),
+  createdBy: uuid("created_by").notNull().references(() => users.id, { onDelete: "restrict" }),
+  createdAt: ts("created_at").notNull().defaultNow(),
+});
