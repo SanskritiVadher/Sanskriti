@@ -2,6 +2,7 @@
  * "What needs your attention?" — every item comes from live data and says what happened, why it
  * matters, and what to do. Nothing is shown unless the data supports it.
  */
+import { findings } from "@/lib/analytics/anomalies";
 import { and, eq, sql } from "drizzle-orm";
 import { schema, type DB } from "@/db";
 import { D, formatINRShort, formatINR } from "@/lib/money";
@@ -66,6 +67,10 @@ export async function attentionItems(db: DB, companyId: string): Promise<Attenti
   const unconfirmed = active.filter((s) => s.gstRateStatus !== "USER_CONFIRMED").length;
   if (unconfirmed) out.push({ tone: "info", what: `${unconfirmed} product${unconfirmed > 1 ? "s have" : " has"} a GST rate that isn't confirmed.`,
     why: "A wrong rate means wrong GST on every bill for that product.", action: "Compare with your supplier's GST bill for the same item (it shows HSN and rate), then confirm.", href: "/inventory", cta: "Review" });
+  const odd = (await findings(db, companyId, today)).open;
+  const serious = odd.filter((f) => f.tone === "bad");
+  if (odd.length) out.push({ tone: serious.length ? "warn" : "info", what: `${odd.length} thing${odd.length > 1 ? "s look" : " looks"} unusual${serious.length ? ` (${serious.length} to check now)` : ""}: ${odd[0].what}`,
+    why: "Possible duplicates, sales below cost, large cash or back-dated entries.", action: "Check each one, or mark it fine.", href: "/assistant/checks", cta: "Check" });
   return out;
 }
 

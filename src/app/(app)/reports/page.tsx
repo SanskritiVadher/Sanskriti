@@ -14,10 +14,11 @@ const READY = [
   { href: "/reports/ratios", title: "How healthy are my numbers?", sub: "21 ratios in plain language, against your own history and targets." },
   { href: "/reports/profitability", title: "Where do I make money?", sub: "Profit by product, brand, customer and salesperson." },
   { href: "/inventory/insights", title: "What should I reorder?", sub: "Slow, dead and low stock, with reorder suggestions." },
+  { href: "/assistant/checks", title: "Anything unusual?", sub: "Possible duplicates, below-cost sales, large cash, back-dated entries." },
   { href: "/reports/audit", title: "Who did what", sub: "Audit trail of every change, with before and after." },
 ];
 const LATER = [
-  ["AI assistant", 8], ["Bank reconciliation", 9],
+  ["Asking questions in plain words (needs an AI key)", 8], ["Bank reconciliation", 9],
 ] as const;
 
 export default async function Reports() {

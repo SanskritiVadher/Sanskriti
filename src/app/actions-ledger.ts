@@ -34,8 +34,8 @@ export async function recordMoneyAction(f: FormData) {
   let cashWarn: string[] = [];
   try {
     if (type === "receipt") entry = await recordReceipt(db, { ...base, cashBankId: s(f, "cashBankId"), fromAccountId: s(f, "otherId") });
-    else if (type === "payment") entry = await recordPayment(db, { ...base, cashBankId: s(f, "cashBankId"), toAccountId: s(f, "otherId") });
-    if (type === "payment") {
+    else if (type === "payment") {
+      entry = await recordPayment(db, { ...base, cashBankId: s(f, "cashBankId"), toAccountId: s(f, "otherId") });
       const cash = await db.query.accounts.findFirst({ where: and(eq(schema.accounts.id, s(f, "cashBankId")), eq(schema.accounts.systemKey, "CASH")) });
       if (cash) cashWarn = await cashPaymentWarnings(db, ctx.company.id, s(f, "date"), s(f, "amount").replace(/[,₹\s]/g, "") || "0");
     }

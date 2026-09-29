@@ -17,7 +17,7 @@ const NAV = [
   { href: "/suppliers", label: "Suppliers", phase: 1 },
   { href: "/gst", label: "GST", phase: 1 },
   { href: "/reports", label: "Reports", phase: 1 },
-  { href: "/assistant", label: "AI Assistant", phase: 8 },
+  { href: "/assistant", label: "Assistant", phase: 1 },
   { href: "/settings", label: "Settings", phase: 1 },
 ];
 

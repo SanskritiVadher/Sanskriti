@@ -2,7 +2,7 @@
 
 Owner-first accounting, GST, billing and inventory for an Indian wholesale business (starting with SF Sonic and Usha).
 
-**Status: Phase 7 of 10.**
+**Status: Phase 8 of 10.**
 - Phase 1: setup, database, login and roles, design system, company setup wizard, default chart of accounts.
 - Phase 2: double-entry posting engine (enforced by database triggers), vouchers (money in/out, cash↔bank, adjustments), reversal instead of deletion, opening balances, trial balance, account statements, day book, owner/accountant view, system health, team password reset.
 - Phase 3: products (prices, HSN, owner-confirmed GST rate), weighted-average stock engine tied to the ledger, stock corrections, customers & suppliers with ledger-based dues, payments, WhatsApp reminders, Excel/CSV/Tally import with preview, guided corrections ("Fix a mistake"), stock and dues health checks.
@@ -10,6 +10,7 @@ Owner-first accounting, GST, billing and inventory for an Indian wholesale busin
 - Phase 5: credit/debit notes (partial returns priced like the original line), GSTR-1 (B2B, B2CL > ₹1 lakh, B2CS, CDNR/CDNUR, HSN split B2B/B2C, documents issued) as portal JSON + Excel, GSTR-3B summary with legal ITC set-off order, GST payment voucher (idempotent), GSTR-2B JSON matching, GST rate table with source/status (never auto-applied), GST books-vs-documents health check.
 - Phase 6: profit & loss (trading + P&L, previous-period comparison, arithmetic 'why it changed'), balance sheet (owner's stake = capital + earlier years + this year, no closing entries), cash flow direct + indirect (both must equal actual cash change), Excel pack for the CA, audit trail viewer with before/after, financial-year locking (owner-only reopen).
 - Phase 7: business health (six plain answers, no single score), 21 ratios with meaning, benchmark source (your target > credit terms > your history > general reference) and 'show me why', profitability by product / brand / customer / salesperson net of returns, stock health (out / low / slow / dead / overstock), reorder suggestions only with enough sales history, owner targets and reorder settings.
+- Phase 8 (no AI key yet): Assistant page — quick entry that reads a typed sentence (English/Hinglish: names, amounts incl. k/lakh, cash/UPI, yesterday, dd/mm) into a proposal the owner reviews and confirms; nothing posts without the tick. 'Things that look unusual': 11 rule-based checks (duplicate bills/invoices, below-cost and unusually cheap sales, large amounts, back-dated entries, cash-rule breaches, over credit limit, many cancellations, expense jumps), each with why + action, 'checked, it's fine' is audited. Fixed: Money in form saved the entry and then showed an error.
 
 ### GST: free route
 The app does not connect to the GST portal. It prepares GSTR-1 (JSON for the portal's offline tool, and Excel for the CA) and reads GSTR-2B JSON that the owner downloads. Always validate the JSON in the portal's offline tool before filing: the portal schema changes over time.
