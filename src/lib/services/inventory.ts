@@ -131,7 +131,7 @@ type AddStock = { companyId: string; userId: string; productId: string; qty: str
 
 /** Stock in at a known cost: Dr Stock-in-hand, Cr counter account. */
 async function addStockTx(tx: Tx, a: AddStock) {
-  const product = await tx.execute(sql`SELECT id FROM products WHERE id = ${a.productId} FOR UPDATE`); // serialise per product
+  const product = await tx.execute(sql`SELECT id FROM products WHERE id = ${a.productId} AND company_id = ${a.companyId} FOR UPDATE`); // serialise per product
   if (!product.rows.length) throw new UserFacingError("Product not found.");
   const q = D(a.qty), value = toDb(q.mul(a.unitCost));
   const wh = await defaultWarehouse(tx, a.companyId);

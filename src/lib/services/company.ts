@@ -51,12 +51,34 @@ export async function registerOwner(
   });
 }
 
-export async function authenticate(db: DB, emailRaw: string, password: string) {
+const DUMMY_HASH = "$2b$10$XZlaCyxgrA4OPNdDEHMYReeqpqstypUeIr2XNEYTbGmXYMpBjpOUi";
+const LOCK_MINUTES = 15, MAX_PER_EMAIL = 5, MAX_PER_IP = 30;
+
+/** Slows down password guessing: 5 wrong tries on one email, or 30 from one network, pauses sign-in for 15 minutes. */
+export async function assertLoginAllowed(db: DB, email: string, ip: string | null) {
+  const r = await db.execute<{ e: number; i: number; first: string | null }>(sql`
+    SELECT count(*) FILTER (WHERE email = ${email})::int e, count(*) FILTER (WHERE ${ip}::text IS NOT NULL AND ip = ${ip})::int i,
+      min(at) FILTER (WHERE email = ${email})::text first
+    FROM login_attempts WHERE NOT ok AND at > now() - make_interval(mins => ${LOCK_MINUTES})
+      AND at > coalesce((SELECT max(at) FROM login_attempts WHERE ok AND email = ${email}), '-infinity')`);
+  const x = r.rows[0];
+  if (x.e >= MAX_PER_EMAIL || x.i >= MAX_PER_IP) {
+    const wait = x.first ? Math.max(1, Math.ceil((Date.parse(x.first) + LOCK_MINUTES * 60000 - Date.now()) / 60000)) : LOCK_MINUTES;
+    throw new UserFacingError(`Too many wrong attempts. For safety, sign-in is paused — try again in ${wait} minute${wait > 1 ? "s" : ""}.`);
+  }
+}
+
+export async function authenticate(db: DB, emailRaw: string, password: string, ip: string | null = null) {
   const email = emailRaw.trim().toLowerCase();
+  await assertLoginAllowed(db, email, ip);
   const user = await db.query.users.findFirst({ where: eq(schema.users.email, email) });
-  // Same message either way: don't reveal which emails exist.
-  if (!user || !user.isActive || !(await bcrypt.compare(password, user.passwordHash)))
+  // Same message and same work either way: don't reveal which emails exist.
+  const ok = await bcrypt.compare(password, user?.passwordHash ?? DUMMY_HASH);
+  if (!user || !user.isActive || !ok) {
+    await db.insert(schema.loginAttempts).values({ email, ip, ok: false });
     throw new UserFacingError("Email or password is incorrect.");
+  }
+  await db.insert(schema.loginAttempts).values({ email, ip, ok: true });
   const m = await db.query.memberships.findFirst({ where: eq(schema.memberships.userId, user.id) });
   await db.update(schema.users).set({ lastLoginAt: new Date() }).where(eq(schema.users.id, user.id));
   await audit(db, { companyId: m?.companyId, userId: user.id, action: "user.login", entityType: "user", entityId: user.id });
@@ -188,7 +210,7 @@ async function assertCanManage(db: DB, companyId: string, actorId: string, targe
 export async function resetUserPassword(db: DB, companyId: string, actorId: string, targetUserId: string, newPassword: string) {
   if (newPassword.length < 8) throw new UserFacingError("New password must be at least 8 characters.", "password");
   await assertCanManage(db, companyId, actorId, targetUserId);
-  await db.update(schema.users).set({ passwordHash: await bcrypt.hash(newPassword, 10) }).where(eq(schema.users.id, targetUserId));
+  await db.update(schema.users).set({ passwordHash: await bcrypt.hash(newPassword, 10), sessionsValidAfter: new Date() }).where(eq(schema.users.id, targetUserId));
   await audit(db, { companyId, userId: actorId, action: "user.password_reset", entityType: "user", entityId: targetUserId });
 }
 
@@ -200,11 +222,25 @@ export async function setUserActive(db: DB, companyId: string, actorId: string, 
   await audit(db, { companyId, userId: actorId, action: active ? "user.activate" : "user.deactivate", entityType: "user", entityId: targetUserId });
 }
 
+/** "Log out everywhere": every existing session for this user stops working. */
+export async function logoutEverywhere(db: DB, userId: string) {
+  await db.update(schema.users).set({ sessionsValidAfter: new Date() }).where(eq(schema.users.id, userId));
+  await audit(db, { userId, action: "user.logout_all", entityType: "user", entityId: userId });
+}
+
+/** Signup is open only for the very first account, unless ALLOW_SIGNUP=true. Everyone else is added by the owner. */
+export async function signupOpen(db: DB) {
+  if (process.env.ALLOW_SIGNUP === "true") return true;
+  const r = await db.execute<{ n: number }>(sql`SELECT count(*)::int n FROM users`);
+  return r.rows[0].n === 0;
+}
+
 /** Any user changes their own password (needs the current one). */
 export async function changeOwnPassword(db: DB, userId: string, current: string, next: string) {
   const u = await db.query.users.findFirst({ where: eq(schema.users.id, userId) });
   if (!u || !(await bcrypt.compare(current, u.passwordHash))) throw new UserFacingError("Current password is incorrect.", "current");
   if (next.length < 8) throw new UserFacingError("New password must be at least 8 characters.", "password");
-  await db.update(schema.users).set({ passwordHash: await bcrypt.hash(next, 10) }).where(eq(schema.users.id, userId));
+  // Signs out every other device; the caller issues a fresh session for this one.
+  await db.update(schema.users).set({ passwordHash: await bcrypt.hash(next, 10), sessionsValidAfter: new Date() }).where(eq(schema.users.id, userId));
   await audit(db, { userId, action: "user.password_change", entityType: "user", entityId: userId });
 }

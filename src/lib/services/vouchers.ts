@@ -127,7 +127,8 @@ export async function setOpeningBalances(db: DB, p: OpeningInput) {
 }
 
 export async function reverseInTx(tx: Parameters<Parameters<DB["transaction"]>[0]>[0], p: { companyId: string; userId: string }, entryId: string) {
-  const orig = await tx.query.journalEntries.findFirst({ where: eq(schema.journalEntries.id, entryId) });
+  const orig = await tx.query.journalEntries.findFirst({ where: and(eq(schema.journalEntries.id, entryId), eq(schema.journalEntries.companyId, p.companyId)) });
+  if (!orig) throw new LedgerError("Entry not found.");
   const lines = await tx.query.journalLines.findMany({ where: eq(schema.journalLines.entryId, entryId) });
   const rev = await postEntryTx(tx, { companyId: p.companyId, userId: p.userId, voucherType: "REVERSAL", date: orig!.entryDate,
     narration: `Reversal of ${orig!.voucherNumber}: opening balance updated`, reversalOfId: entryId, sourceType: orig!.sourceType, sourceId: orig!.sourceId ?? undefined,

@@ -78,7 +78,7 @@ function sniffTable(buf: Buffer): string[][] | null {
 }
 
 export async function readStatementFile(buf: Buffer, fileName: string): Promise<string[][]> {
-  if (buf.length > 5 * 1024 * 1024) throw new UserFacingError("File is larger than 5 MB. Download a shorter period.");
+  if (buf.length > 4 * 1024 * 1024) throw new UserFacingError("File is larger than 4 MB. Download a shorter period (e.g. one quarter).");
   const lower = fileName.toLowerCase();
   if (lower.endsWith(".xls") || lower.endsWith(".txt")) {
     const t = sniffTable(buf);

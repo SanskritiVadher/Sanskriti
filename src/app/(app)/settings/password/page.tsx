@@ -1,3 +1,4 @@
+import { logoutEverywhereAction } from "../../../actions";
 import { requireContext } from "@/lib/session";
 import { Button, Card, Field, Input, Notice, PageHeader } from "@/components/ui";
 import { changePasswordAction } from "../../../actions-ledger";
@@ -15,6 +16,10 @@ export default async function Password({ searchParams }: { searchParams: Promise
       <Field label="New password" hint="At least 8 characters" error={err("password")}><Input type="password" name="password" minLength={8} required autoComplete="new-password" /></Field>
       <Field label="Type new password again" error={err("confirm")}><Input type="password" name="confirm" required autoComplete="new-password" /></Field>
       <Button>Change password</Button>
+      <p className="text-[13px] text-ink-3">Changing your password signs you out on every other phone or computer.</p>
     </form></Card>
+    <Card className="mt-6 max-w-md"><h2 className="text-[17px] font-semibold">Lost a phone, or used a shared computer?</h2>
+      <p className="mt-1 text-[14px] text-ink-2">Sign out of Sanskriti everywhere, including here.</p>
+      <form action={logoutEverywhereAction} className="mt-3"><Button variant="secondary">Log out everywhere</Button></form></Card>
   </>;
 }

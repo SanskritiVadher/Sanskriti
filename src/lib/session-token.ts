@@ -3,6 +3,7 @@ import { SignJWT, jwtVerify } from "jose";
 
 export const SESSION_COOKIE = "bizos_session";
 export type SessionPayload = { userId: string; companyId: string | null };
+export type VerifiedSession = SessionPayload & { iat: number };
 
 function key() {
   const s = process.env.AUTH_SECRET;
@@ -14,11 +15,11 @@ export async function signSession(p: SessionPayload) {
   return new SignJWT(p).setProtectedHeader({ alg: "HS256" }).setIssuedAt().setExpirationTime("7d").sign(key());
 }
 
-export async function verifySession(token: string | undefined): Promise<SessionPayload | null> {
+export async function verifySession(token: string | undefined): Promise<VerifiedSession | null> {
   if (!token) return null;
   try {
     const { payload } = await jwtVerify(token, key());
-    return { userId: String(payload.userId), companyId: (payload.companyId as string) ?? null };
+    return { userId: String(payload.userId), companyId: (payload.companyId as string) ?? null, iat: Number(payload.iat ?? 0) };
   } catch {
     return null;
   }

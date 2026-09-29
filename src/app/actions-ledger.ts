@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { db, schema } from "@/db";
 import { and, eq } from "drizzle-orm";
 import { cashPaymentWarnings } from "@/lib/services/sales";
-import { requireContext } from "@/lib/session";
+import { requireContext, startSession } from "@/lib/session";
 import { postEntry, reverseEntry } from "@/lib/accounting/engine";
 import { recordReceipt, recordPayment, recordContra, setOpeningBalances } from "@/lib/services/vouchers";
 import { resetUserPassword, setUserActive, changeOwnPassword, setSetupStep } from "@/lib/services/company";
@@ -95,5 +95,6 @@ export async function changePasswordAction(f: FormData) {
     if (s(f, "password") !== s(f, "confirm")) throw new UserFacingError("The two new passwords don't match.", "confirm");
     await changeOwnPassword(db, ctx.user.id, s(f, "current"), s(f, "password"));
   } catch (e) { fail("/settings/password", e); }
+  await startSession({ userId: ctx.user.id, companyId: ctx.company.id }); // keep this device signed in
   redirect("/settings/password?saved=1");
 }

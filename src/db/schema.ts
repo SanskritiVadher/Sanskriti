@@ -49,6 +49,8 @@ export const users = pgTable("users", {
   passwordHash: text("password_hash").notNull(),
   isActive: boolean("is_active").notNull().default(true),
   lastLoginAt: ts("last_login_at"),
+  /** Sessions issued before this moment are rejected (password change, "log out everywhere"). */
+  sessionsValidAfter: ts("sessions_valid_after"),
   createdAt: ts("created_at").notNull().defaultNow(),
 }, (t) => [uniqueIndex("users_email_uq").on(t.email)]);
 
@@ -385,7 +387,7 @@ export const salesInvoiceLines = pgTable("sales_invoice_lines", {
   unitCost: numeric("unit_cost", { precision: 18, scale: 4 }).notNull(),
   costValue: money("cost_value").notNull(),
   serials: text("serials"),
-});
+}, (t) => [index("sil_invoice_idx").on(t.invoiceId), index("sil_product_idx").on(t.productId)]);
 
 /** Supplier bill. `billNumber` is the supplier's own number; `number` is our ledger voucher number. */
 export const purchaseBills = pgTable("purchase_bills", {
@@ -429,7 +431,7 @@ export const purchaseBillLines = pgTable("purchase_bill_lines", {
   sgst: money("sgst").notNull(),
   igst: money("igst").notNull(),
   unitCost: numeric("unit_cost", { precision: 18, scale: 4 }).notNull(),
-});
+}, (t) => [index("pbl_bill_idx").on(t.billId), index("pbl_product_idx").on(t.productId)]);
 
 // ───────────────────────── Phase 5: GST ─────────────────────────
 /** VERIFIED = checked against an official notification by owner/CA; USER_CONFIRMED = owner/CA confirmed;
@@ -494,7 +496,7 @@ export const gstNoteLines = pgTable("gst_note_lines", {
   igst: money("igst").notNull(),
   unitCost: numeric("unit_cost", { precision: 18, scale: 4 }).notNull(),
   costValue: money("cost_value").notNull(),
-});
+}, (t) => [index("gnl_note_idx").on(t.noteId)]);
 
 /** GSTR-2B (or 2A) JSON the owner downloaded from the GST portal, parsed for matching. */
 export const gstr2bImports = pgTable("gstr2b_imports", {
@@ -544,3 +546,12 @@ export const bankStatementLines = pgTable("bank_statement_lines", {
   note: text("note"),
 }, (t) => [uniqueIndex("bsl_fingerprint_uq").on(t.accountId, t.fingerprint), index("bsl_company_date_idx").on(t.companyId, t.txnDate),
   uniqueIndex("bsl_matched_line_uq").on(t.matchedLineId)]);
+
+/** Failed sign-ins, for slowing down password guessing. */
+export const loginAttempts = pgTable("login_attempts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  email: text("email").notNull(),
+  ip: text("ip"),
+  ok: boolean("ok").notNull(),
+  at: ts("at").notNull().defaultNow(),
+}, (t) => [index("login_attempts_email_idx").on(t.email, t.at), index("login_attempts_ip_idx").on(t.ip, t.at)]);

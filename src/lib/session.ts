@@ -19,6 +19,8 @@ export async function getContext() {
   if (!s?.companyId) return null;
   const user = await db.query.users.findFirst({ where: eq(schema.users.id, s.userId) });
   if (!user?.isActive) return null;
+  // Password changed or "log out everywhere" since this session was issued.
+  if (user.sessionsValidAfter && s.iat < Math.floor(user.sessionsValidAfter.getTime() / 1000)) return null;
   const m = await db.query.memberships.findFirst({
     where: and(eq(schema.memberships.userId, s.userId), eq(schema.memberships.companyId, s.companyId)) });
   if (!m) return null;
@@ -29,7 +31,7 @@ export async function getContext() {
 
 export async function requireContext(permission?: Permission) {
   const ctx = await getContext();
-  if (!ctx) redirect("/login");
+  if (!ctx) redirect("/signout");
   if (permission && !can(ctx.role, permission)) redirect("/home?denied=1");
   return ctx;
 }

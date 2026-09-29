@@ -75,6 +75,12 @@ export async function attentionItems(db: DB, companyId: string): Promise<Attenti
     why: "Entries since then haven't been checked against the bank.", action: "Download a new statement from net banking and upload it.", href: "/money/bank", cta: "Upload" });
   else if (b.open > 0) out.push({ tone: "info", what: `${b.open} bank line${b.open > 1 ? "s aren't" : " isn't"} matched to your books yet.`,
     why: "Something the bank shows may be missing from your books (charges, a payment received).", action: "Match or record them.", href: "/money/bank", cta: "Open" });
+  const bk = await db.execute<{ last: string | null; entries: number }>(sql`SELECT (SELECT max(created_at)::text FROM audit_logs WHERE company_id = ${companyId} AND action = 'backup.download') last,
+    (SELECT count(*)::int FROM journal_entries WHERE company_id = ${companyId}) entries`);
+  const lastBk = bk.rows[0].last;
+  if (bk.rows[0].entries > 0 && (!lastBk || Date.now() - Date.parse(lastBk) > 7 * 86400000)) out.push({ tone: "info",
+    what: lastBk ? `Last backup was ${Math.floor((Date.now() - Date.parse(lastBk)) / 86400000)} days ago.` : "You haven't downloaded a backup yet.",
+    why: "If the online database or account is ever lost, your own backup file is how you get your books back.", action: "Download one and keep it in Google Drive or email.", href: "/settings/backup", cta: "Back up" });
   const odd = (await findings(db, companyId, today)).open;
   const serious = odd.filter((f) => f.tone === "bad");
   if (odd.length) out.push({ tone: serious.length ? "warn" : "info", what: `${odd.length} thing${odd.length > 1 ? "s look" : " looks"} unusual${serious.length ? ` (${serious.length} to check now)` : ""}: ${odd[0].what}`,

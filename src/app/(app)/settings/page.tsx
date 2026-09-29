@@ -22,6 +22,7 @@ export default async function Settings({ searchParams }: { searchParams: Promise
       {edit && <Link href="/settings/years" className="rounded-lg border border-line bg-surface px-4 py-2">Financial years</Link>}
       {can(ctx.role, "reports.financial") && <Link href="/settings/health" className="rounded-lg border border-line bg-surface px-4 py-2">System health</Link>}
       {can(ctx.role, "reports.financial") && <Link href="/settings/targets" className="rounded-lg border border-line bg-surface px-4 py-2">My targets</Link>}
+      {edit && <Link href="/settings/backup" className="rounded-lg border border-line bg-surface px-4 py-2">Backup</Link>}
       <Link href="/settings/password" className="rounded-lg border border-line bg-surface px-4 py-2">Change my password</Link>
       {can(ctx.role, "ledger.post_manual") && <Link href="/money/new?type=journal" className="rounded-lg border border-line bg-surface px-4 py-2 text-ink-2">Advanced: manual journal</Link>}
       {edit && <Link href="/setup?step=3" className="rounded-lg border border-line bg-surface px-4 py-2">Bank accounts</Link>}

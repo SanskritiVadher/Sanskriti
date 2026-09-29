@@ -1,11 +1,15 @@
 "use server";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
+import { sql } from "drizzle-orm";
+import { restoreCompany, unpackBackup } from "@/lib/services/backup";
+import { ledgerHealth } from "@/lib/accounting/reports";
 import { db } from "@/db";
 import { startSession, endSession, requireContext } from "@/lib/session";
 import {
   registerOwner, authenticate, updateBusinessInfo, updateGstInfo, addBankAccount, addBrand,
-  setSetupStep, addUser, UserFacingError,
+  setSetupStep, addUser, UserFacingError, signupOpen, logoutEverywhere,
 } from "@/lib/services/company";
 
 const s = (f: FormData, k: string) => String(f.get(k) ?? "");
@@ -22,6 +26,7 @@ export async function signupAction(f: FormData) {
   // Refuse before creating anything if login can't work (prevents a half-created account).
   if ((process.env.AUTH_SECRET ?? "").length < 32)
     redirect(`/signup?error=${encodeURIComponent("The app isn't fully set up yet (login secret missing). Please ask whoever deployed it to add AUTH_SECRET. No account was created.")}`);
+  if (!(await signupOpen(db))) redirect(`/signup?error=${encodeURIComponent("New sign-ups are closed. Ask the owner to add you under Settings → Team.")}`);
   let r;
   try {
     r = await registerOwner(db, { name: s(f, "name"), email: s(f, "email"), password: s(f, "password"), businessName: s(f, "businessName") });
@@ -30,14 +35,36 @@ export async function signupAction(f: FormData) {
   redirect("/setup?step=1");
 }
 
+/** Only on a brand-new, empty database: load a backup file (disaster recovery). */
+export async function restoreBackupAction(f: FormData) {
+  const n = await db.execute<{ n: number }>(sql`SELECT count(*)::int n FROM users`);
+  if (n.rows[0].n > 0) redirect("/login");
+  const file = f.get("backup");
+  let msg = "";
+  try {
+    if (!(file instanceof File) || file.size === 0) throw new UserFacingError("Choose the backup file.");
+    const r = await restoreCompany(db, unpackBackup(Buffer.from(await file.arrayBuffer())));
+    const failed = (await ledgerHealth(db, r.companyId)).filter((h) => !h.ok);
+    if (failed.length) msg = `Restored, but these checks failed: ${failed.map((x) => x.name).join(", ")}.`;
+  } catch (e) { redirect(`/signup?error=${encodeURIComponent(e instanceof UserFacingError ? e.message : "Couldn't restore that file.")}`); }
+  redirect(`/login?restored=1${msg ? `&warn=${encodeURIComponent(msg)}` : ""}`);
+}
+
 export async function loginAction(f: FormData) {
   let r;
-  try { r = await authenticate(db, s(f, "email"), s(f, "password")); } catch (e) { back("/login", e); }
+  const h = await headers();
+  const ip = (h.get("x-forwarded-for") ?? "").split(",")[0].trim() || h.get("x-real-ip") || null;
+  try { r = await authenticate(db, s(f, "email"), s(f, "password"), ip); } catch (e) { back("/login", e); }
   await startSession({ userId: r!.user.id, companyId: r!.companyId });
   redirect("/home");
 }
 
 export async function logoutAction() { await endSession(); redirect("/login"); }
+export async function logoutEverywhereAction() {
+  const ctx = await requireContext();
+  await logoutEverywhere(db, ctx.user.id);
+  await endSession(); redirect("/login");
+}
 
 export async function saveBusinessAction(f: FormData) {
   const ctx = await requireContext("company.edit");

@@ -57,6 +57,13 @@
       "when": 1790698574714,
       "tag": "0007_phase9_bank",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1790699765808,
+      "tag": "0008_phase10_security",
+      "breakpoints": true
     }
   ]
 }

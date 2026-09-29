@@ -87,15 +87,19 @@ export async function findings(db: DB, companyId: string, asOf = todayIST(), opt
       what: `${r.vt === "RECEIPT" ? "Money in" : "Money out"} of ${formatINR(r.amt)} on ${fmtDate(r.d)} (${r.no})${r.nar ? ` — "${r.nar}"` : ""}.`,
       why: `More than 5 times your usual ${r.vt === "RECEIPT" ? "receipt" : "payment"} of ${formatINR(r.usual)}.`, action: "Check the amount has no extra zero." });
 
-  // 6. Entered long after its date (back-dated).
-  for (const r of await q<{ id: string; no: string; d: string; created: string; amt: string; who: string }>(sql`
-    SELECT e.id, e.voucher_number no, e.entry_date d, (e.created_at AT TIME ZONE 'Asia/Kolkata')::date::text created, e.total_amount amt, u.name who
+  // 6. Entered long after its date (back-dated) — grouped per person per day, so catching up on a backlog is one item, not hundreds.
+  for (const r of await q<{ uid: string; who: string; created: string; n: number; first: string; last: string; amt: string; one: string }>(sql`
+    SELECT e.created_by uid, u.name who, (e.created_at AT TIME ZONE 'Asia/Kolkata')::date::text created, count(*)::int n,
+      min(e.entry_date)::text first, max(e.entry_date)::text last, sum(e.total_amount) amt, min(e.id::text) one
     FROM journal_entries e JOIN users u ON u.id = e.created_by
     WHERE e.company_id = ${companyId} AND e.voucher_type NOT IN ('OPENING','REVERSAL') AND e.source_type NOT IN ('opening','import')
-      AND (e.created_at AT TIME ZONE 'Asia/Kolkata')::date BETWEEN ${from} AND ${asOf} AND (e.created_at AT TIME ZONE 'Asia/Kolkata')::date - e.entry_date > 30`))
-    out.push({ key: `BACKDATED:${r.id}`, kind: "BACKDATED", tone: "info", date: r.created, href: `/reports/entry/${r.id}`,
-      what: `${r.no} (${formatINR(r.amt)}) dated ${fmtDate(r.d)} was entered by ${r.who} on ${fmtDate(r.created)}.`,
-      why: "Entries made more than 30 days after their date can change figures you've already seen or filed (GST returns).", action: "Confirm it was genuinely missed, and whether a filed return needs correcting." });
+      AND e.created_at >= ${from}::date - interval '1 day' AND (e.created_at AT TIME ZONE 'Asia/Kolkata')::date BETWEEN ${from} AND ${asOf}
+      AND (e.created_at AT TIME ZONE 'Asia/Kolkata')::date - e.entry_date > 30
+    GROUP BY 1, 2, 3`))
+    out.push({ key: `BACKDATED:${r.uid}:${r.created}`, kind: "BACKDATED", tone: "info", date: r.created, href: r.n === 1 ? `/reports/entry/${r.one}` : "/reports/day-book",
+      what: r.n === 1 ? `${r.who} entered an entry of ${formatINR(r.amt)} on ${fmtDate(r.created)}, dated ${fmtDate(r.first)}.`
+        : `${r.who} entered ${r.n} entries (${formatINR(r.amt)}) on ${fmtDate(r.created)}, dated ${fmtDate(r.first)} to ${fmtDate(r.last)}.`,
+      why: "Entries made more than 30 days after their date can change figures you've already seen or filed (GST returns).", action: "If this was catching up on old bills, mark it fine. Otherwise check why, and whether a filed return needs correcting." });
 
   // 7 & 8. Cash-rule breaches per person per day.
   for (const r of await q<{ party: string; name: string; d: string; amt: string; dir: string }>(sql`

@@ -16,14 +16,15 @@ const days = (a: string, b: string) => Math.round((Date.parse(a + "T00:00:00Z") 
 /** Old balances brought in at setup have no known bill dates, so their age is unknown — never invented. */
 export type OpenItem = { entryId: string; docId: string | null; number: string; date: string; dueDate: string; amount: Decimal; open: Decimal; daysOverdue: number; ageUnknown: boolean; settledOn: string | null; kind: "INVOICE" | "BILL" | "OPENING" | "OTHER" };
 
-export async function openItems(db: DB, companyId: string, partyId: string, asOf = todayIST()) {
-  const party = await db.query.parties.findFirst({ where: and(eq(schema.parties.id, partyId), eq(schema.parties.companyId, companyId)) });
-  if (!party) return null;
-  const C = party.type === "CUSTOMER";
+type Row = { party_id: string; entry_id: string; date: string; created_at: string; vnum: string; source_type: string; dr: string; cr: string;
+  inv_id: string | null; inv_due: string | null; inv_no: string | null; bill_id: string | null; bill_due: string | null; bill_no: string | null; target: string | null };
+
+/** One query for one party or for every party of a type (ageing) — no per-party round trips. */
+async function openRows(db: DB, companyId: string, asOf: string, filter: { partyId: string } | { type: "CUSTOMER" | "SUPPLIER" }) {
+  const where = "partyId" in filter ? sql`l.party_id = ${filter.partyId}` : sql`l.party_id IN (SELECT id FROM parties WHERE company_id = ${companyId} AND type = ${filter.type})`;
   // `target` = the document a credit belongs to (a return or a payment made with that bill), settled first.
-  const rows = await db.execute<{ entry_id: string; date: string; created_at: string; vnum: string; source_type: string; dr: string; cr: string;
-    inv_id: string | null; inv_due: string | null; inv_no: string | null; bill_id: string | null; bill_due: string | null; bill_no: string | null; target: string | null }>(sql`
-    SELECT e.id AS entry_id, e.entry_date AS date, e.created_at, e.voucher_number AS vnum, e.source_type,
+  const rows = await db.execute<Row>(sql`
+    SELECT l.party_id, e.id AS entry_id, e.entry_date AS date, e.created_at, e.voucher_number AS vnum, e.source_type,
       sum(l.debit) AS dr, sum(l.credit) AS cr,
       si.id AS inv_id, si.due_date AS inv_due, si.number AS inv_no, pb.id AS bill_id, pb.due_date AS bill_due, pb.bill_number AS bill_no,
       coalesce(gn.invoice_id, gn.bill_id,
@@ -32,12 +33,24 @@ export async function openItems(db: DB, companyId: string, partyId: string, asOf
     LEFT JOIN sales_invoices si ON si.entry_id = e.id
     LEFT JOIN purchase_bills pb ON pb.entry_id = e.id
     LEFT JOIN gst_notes gn ON gn.entry_id = e.id
-    WHERE l.company_id = ${companyId} AND l.party_id = ${partyId} AND e.status = 'POSTED' AND e.reversal_of_id IS NULL AND e.entry_date <= ${asOf}
-    GROUP BY e.id, si.id, pb.id, gn.id ORDER BY e.entry_date, e.created_at`);
+    WHERE l.company_id = ${companyId} AND ${where} AND e.status = 'POSTED' AND e.reversal_of_id IS NULL AND e.entry_date <= ${asOf}
+    GROUP BY l.party_id, e.id, si.id, pb.id, gn.id ORDER BY e.entry_date, e.created_at`);
+  return rows.rows;
+}
+
+export async function openItems(db: DB, companyId: string, partyId: string, asOf = todayIST()) {
+  const party = await db.query.parties.findFirst({ where: and(eq(schema.parties.id, partyId), eq(schema.parties.companyId, companyId)) });
+  if (!party) return null;
+  return settle(party, await openRows(db, companyId, asOf, { partyId }), asOf);
+}
+
+type PartyRow = typeof schema.parties.$inferSelect;
+function settle(party: PartyRow, rows: Row[], asOf: string) {
+  const C = party.type === "CUSTOMER";
   // For customers, debits raise what they owe; for suppliers, credits raise what we owe.
   const items: OpenItem[] = [];
   const credits: { date: string; amount: Decimal; target: string | null }[] = [];
-  for (const r of rows.rows) {
+  for (const r of rows) {
     const up = D(C ? r.dr : r.cr).minus(C ? r.cr : r.dr);
     if (up.gt(0)) {
       const kind = r.inv_id ? "INVOICE" : r.bill_id ? "BILL" : r.source_type === "opening_party" ? "OPENING" : "OTHER";
@@ -85,12 +98,16 @@ export async function receivablesFor(db: DB, companyId: string, partyId: string,
 export type Bucket = "notDue" | "d1_30" | "d31_60" | "d61_90" | "d90" | "old";
 /** Company-wide ageing + a "call these first" ranking (amount overdue weighted by how late). */
 export async function ageing(db: DB, companyId: string, type: "CUSTOMER" | "SUPPLIER", asOf = todayIST()) {
-  const ids = await db.execute<{ party_id: string }>(sql`
-    SELECT DISTINCT l.party_id FROM journal_lines l JOIN parties p ON p.id = l.party_id WHERE l.company_id = ${companyId} AND p.type = ${type}`);
+  const [plist, rows] = await Promise.all([
+    db.query.parties.findMany({ where: and(eq(schema.parties.companyId, companyId), eq(schema.parties.type, type)) }),
+    openRows(db, companyId, asOf, { type })]);
+  const byParty = new Map<string, Row[]>();
+  for (const r of rows) (byParty.get(r.party_id) ?? byParty.set(r.party_id, []).get(r.party_id)!).push(r);
+  const pmap = new Map(plist.map((p) => [p.id, p]));
   const buckets: Record<Bucket, Decimal> = { notDue: D(0), d1_30: D(0), d31_60: D(0), d61_90: D(0), d90: D(0), old: D(0) };
   const parties: { id: string; name: string; phone: string | null; whatsapp: string | null; outstanding: Decimal; overdue: Decimal; oldBalance: Decimal; oldest: number; score: Decimal; habit: { avgDaysLate: number } | null; dueSoon: Decimal }[] = [];
-  for (const { party_id } of ids.rows) {
-    const r = (await openItems(db, companyId, party_id, asOf))!;
+  for (const [pid, prow] of byParty) {
+    const r = settle(pmap.get(pid)!, prow, asOf);
     for (const i of r.open) {
       const b: Bucket = i.ageUnknown ? "old" : i.daysOverdue === 0 ? "notDue" : i.daysOverdue <= 30 ? "d1_30" : i.daysOverdue <= 60 ? "d31_60" : i.daysOverdue <= 90 ? "d61_90" : "d90";
       buckets[b] = buckets[b].plus(i.open);

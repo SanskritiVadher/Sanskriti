@@ -172,7 +172,7 @@ export async function reverseEntryTx(tx: Tx, p: { companyId: string; userId: str
   const locked = await tx.execute<{ id: string }>(sql`SELECT id FROM journal_entries WHERE id = ${p.entryId} AND company_id = ${p.companyId} FOR UPDATE`);
   if (!locked.rows.length) throw new LedgerError("Entry not found.");
   const orig = await tx.query.journalEntries.findFirst({ where: eq(schema.journalEntries.id, p.entryId) });
-  if (!orig) throw new LedgerError("Entry not found.");
+  if (!orig || orig.companyId !== p.companyId) throw new LedgerError("Entry not found.");
   if (orig.status === "REVERSED") throw new LedgerError(`${orig.voucherNumber} has already been reversed.`);
   if (orig.voucherType === "REVERSAL") throw new LedgerError("A reversal can't itself be reversed. Post a fresh entry instead.");
   const lines = await tx.query.journalLines.findMany({ where: eq(schema.journalLines.entryId, orig.id), orderBy: schema.journalLines.lineNo });

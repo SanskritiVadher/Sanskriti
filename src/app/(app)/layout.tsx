@@ -24,7 +24,7 @@ const NAV = [
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const ctx = await getContext();
-  if (!ctx) redirect("/login");
+  if (!ctx) redirect("/signout");
   const mode = await getViewMode();
   if (!ctx.company.setupCompletedAt && ctx.role === "OWNER") redirect(`/setup?step=${ctx.company.setupStep}`);
   return <div className="min-h-screen md:flex">
