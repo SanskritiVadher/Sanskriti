@@ -1,4 +1,4 @@
-# BizOS — business operating system for a wholesale dealership
+# Sanskriti — business operating system for a wholesale dealership
 
 Owner-first accounting, GST, billing and inventory for an Indian wholesale business (starting with SF Sonic and Usha).
 

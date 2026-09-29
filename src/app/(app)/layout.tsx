@@ -1,3 +1,4 @@
+import { APP_NAME } from "@/lib/brand";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getContext } from "@/lib/session";
@@ -25,7 +26,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return <div className="min-h-screen md:flex">
     <aside className="border-b border-line bg-surface md:sticky md:top-0 md:h-screen md:w-60 md:border-r md:border-b-0">
       <div className="px-5 py-5">
-        <p className="text-[15px] font-semibold text-brand">BizOS</p>
+        <p className="text-[15px] font-semibold text-brand">{APP_NAME}</p>
         <p className="mt-0.5 truncate text-[13px] text-ink-2">{ctx.company.name}</p>
         {ctx.company.isDemo && <p className="mt-1 text-[12px] font-medium text-warn">⚠ Demo data</p>}
       </div>

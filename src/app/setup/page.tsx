@@ -1,3 +1,4 @@
+import { APP_NAME } from "@/lib/brand";
 import Link from "next/link";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/db";
@@ -16,7 +17,7 @@ export default async function Setup({ searchParams }: { searchParams: Promise<{ 
   const err = (f: string) => (sp.field === f ? sp.error : undefined);
 
   return <main className="mx-auto max-w-3xl px-4 py-10">
-    <p className="text-[15px] font-semibold text-brand">BizOS · Setting up {c.name}</p>
+    <p className="text-[15px] font-semibold text-brand">{APP_NAME} · Setting up {c.name}</p>
     <ol className="mt-6 mb-8 flex flex-wrap gap-2" aria-label="Setup steps">
       {STEPS.map((s, i) => <li key={s}>
         <Link href={`/setup?step=${i + 1}`} aria-current={step === i + 1 ? "step" : undefined}

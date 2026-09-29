@@ -19,6 +19,9 @@ const back = (path: string, e: unknown): never => {
 };
 
 export async function signupAction(f: FormData) {
+  // Refuse before creating anything if login can't work (prevents a half-created account).
+  if ((process.env.AUTH_SECRET ?? "").length < 32)
+    redirect(`/signup?error=${encodeURIComponent("The app isn't fully set up yet (login secret missing). Please ask whoever deployed it to add AUTH_SECRET. No account was created.")}`);
   let r;
   try {
     r = await registerOwner(db, { name: s(f, "name"), email: s(f, "email"), password: s(f, "password"), businessName: s(f, "businessName") });

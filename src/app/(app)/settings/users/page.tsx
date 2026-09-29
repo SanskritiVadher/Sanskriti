@@ -1,3 +1,4 @@
+import { APP_NAME } from "@/lib/brand";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { requireContext } from "@/lib/session";
@@ -13,7 +14,7 @@ export default async function Users({ searchParams }: { searchParams: Promise<{ 
     .where(eq(schema.memberships.companyId, ctx.company.id));
   const err = (f: string) => (sp.field === f ? sp.error : undefined);
   return <>
-    <PageHeader title="Team & roles" subtitle="Who can use BizOS and what they can do." />
+    <PageHeader title="Team & roles" subtitle={`Who can use ${APP_NAME} and what they can do.`} />
     {sp.added && <div className="mb-4"><Notice tone="good" title="Team member added. Share their email and password with them." /></div>}
     <Card className="mb-6">
       <table className="w-full text-left text-[15px]">
