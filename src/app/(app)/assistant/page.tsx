@@ -16,7 +16,7 @@ const KINDS: [Kind, string][] = [["CUSTOMER_PAYMENT", "Customer paid me"], ["SUP
   ["DRAWINGS", "Took money for home"], ["MONEY_IN", "Other money in"], ["DEPOSIT", "Cash to bank"], ["WITHDRAW", "Bank to cash"]];
 const EXAMPLES = ["Ramesh paid 5000 cash", "paid 25,000 to SF Sonic by NEFT", "chai 200 cash", "rent 12k bank", "deposited 20000 cash in bank", "sahu se 1.5 lakh mila upi kal"];
 
-export default async function Assistant({ searchParams }: { searchParams: Promise<{ q?: string; kind?: string; error?: string }> }) {
+export default async function Assistant({ searchParams }: { searchParams: Promise<{ q?: string; kind?: string; error?: string; bankLine?: string }> }) {
   const ctx = await requireContext("view.dashboard");
   const sp = await searchParams;
   const canRecord = can(ctx.role, "money.record");
@@ -34,10 +34,11 @@ export default async function Assistant({ searchParams }: { searchParams: Promis
     preview = `${name} ${t === "CUSTOMER" ? "owes you" : "is owed"} ${formatINR(bal)} now → ${formatINR(D(bal).minus(p.amount))} after this.`;
   }
   const cashId = c?.cashBank.find((a) => a.systemKey === "CASH")?.id, bankId = c?.cashBank.find((a) => a.groupCode === "1120")?.id;
-  const cbDefault = p?.mode === "CASH" ? cashId : p?.mode === "BANK" ? bankId : undefined;
+  const bl = sp.bankLine ? await db.query.bankStatementLines.findFirst({ where: (t, { eq, and }) => and(eq(t.id, sp.bankLine!), eq(t.companyId, ctx.company.id)) }) : null;
+  const cbDefault = bl ? bl.accountId : p?.mode === "CASH" ? cashId : p?.mode === "BANK" ? bankId : undefined;
   const partyList = c && kind ? c.parties.filter((x) => x.type === (kind === "CUSTOMER_PAYMENT" ? "CUSTOMER" : "SUPPLIER")) : [];
   const partyDefault = p?.partyId;
-  const withKind = (k: string) => `/assistant?q=${encodeURIComponent(q)}&kind=${k}`;
+  const withKind = (k: string) => `/assistant?q=${encodeURIComponent(q)}&kind=${k}${bl ? `&bankLine=${bl.id}` : ""}`;
 
   return <>
     <PageHeader title="Assistant" subtitle="Type what happened; check it; save. Nothing is saved until you confirm." />
@@ -53,14 +54,14 @@ export default async function Assistant({ searchParams }: { searchParams: Promis
 
     {p && c && <Card className="mb-6">
       <h2 className="text-[18px] font-semibold">Check this before saving</h2>
-      <p className="mt-1 text-[14px] text-ink-2">You typed: &ldquo;{q}&rdquo;</p>
+      <p className="mt-1 text-[14px] text-ink-2">{bl ? <>From your bank statement ({fmtDate(bl.txnDate)}): &ldquo;{bl.narration}&rdquo; — {formatINR(D(bl.deposit).gt(0) ? bl.deposit : bl.withdrawal)} {D(bl.deposit).gt(0) ? "in" : "out"}. It will be matched to that line when saved.</> : <>You typed: &ldquo;{q}&rdquo;</>}</p>
       {sp.error && <div className="mt-3"><Notice tone="bad" title={sp.error} /></div>}
       {p.unclear.length > 0 && <div className="mt-3"><Notice tone="warn" title="I couldn't tell:"><ul className="list-disc pl-5">{p.unclear.map((u) => <li key={u}>{u}</li>)}</ul></Notice></div>}
       {p.assumed.length > 0 && <p className="mt-3 text-[14px] text-ink-2">Assumed: {p.assumed.join(" ")}</p>}
       <div className="mt-4 flex flex-wrap gap-2 text-[14px]">{KINDS.map(([k, l]) => <Link key={k} href={withKind(k)}
         className={`rounded-full px-3 py-1 ${k === kind ? "bg-brand text-brand-ink" : "bg-surface-2 text-ink-2"}`}>{l}</Link>)}</div>
       {kind && <form action={confirmQuickEntryAction} className="mt-4 grid gap-4 sm:grid-cols-2">
-        <input type="hidden" name="kind" value={kind} /><input type="hidden" name="text" value={q} />
+        <input type="hidden" name="kind" value={kind} /><input type="hidden" name="text" value={q} />{bl && <input type="hidden" name="bankLine" value={bl.id} />}
         <Field label="Amount (₹)"><Input name="amount" inputMode="decimal" defaultValue={p.amount ?? ""} required className="num" /></Field>
         <Field label="Date" hint={p.date !== todayIST() ? fmtDate(p.date) : undefined}><Input type="date" name="date" defaultValue={p.date} required /></Field>
         {(kind === "CUSTOMER_PAYMENT" || kind === "SUPPLIER_PAYMENT") && <Field label={kind === "CUSTOMER_PAYMENT" ? "Customer" : "Supplier"}>
@@ -73,7 +74,7 @@ export default async function Assistant({ searchParams }: { searchParams: Promis
           <Field label="From"><AccountSelect name="fromId" options={c.cashBank} defaultValue={kind === "DEPOSIT" ? cashId : bankId} /></Field>
           <Field label="To"><AccountSelect name="toId" options={c.cashBank} defaultValue={kind === "DEPOSIT" ? bankId : cashId} /></Field>
         </> : <Field label={kind === "CUSTOMER_PAYMENT" || kind === "MONEY_IN" ? "Received into" : "Paid from"}><AccountSelect name="cashBankId" options={c.cashBank} defaultValue={cbDefault} /></Field>}
-        <div className="sm:col-span-2"><Field label="Note"><Input name="narration" defaultValue={q} /></Field></div>
+        <div className="sm:col-span-2"><Field label="Note"><Input name="narration" defaultValue={bl ? bl.narration.slice(0, 200) : q} /></Field></div>
         {preview && <p className="sm:col-span-2 text-[14px]">{preview}</p>}
         <label className="flex items-center gap-2 sm:col-span-2"><input type="checkbox" name="confirm" value="1" required /> I&rsquo;ve checked this</label>
         <div className="flex gap-3 sm:col-span-2"><Button>Save entry</Button><Link href="/assistant" className="py-2.5 text-ink-2">Discard</Link></div>

@@ -10,7 +10,7 @@ import { ageing } from "./receivables";
 import { stockList } from "./inventory";
 import { partyBalances } from "./parties";
 import { ledgerHealth } from "@/lib/accounting/reports";
-import { todayIST } from "@/lib/dates";
+import { todayIST, fmtDate } from "@/lib/dates";
 
 export type Attention = { tone: "bad" | "warn" | "good" | "info"; what: string; why: string; action: string; href: string; cta: string };
 
@@ -67,6 +67,14 @@ export async function attentionItems(db: DB, companyId: string): Promise<Attenti
   const unconfirmed = active.filter((s) => s.gstRateStatus !== "USER_CONFIRMED").length;
   if (unconfirmed) out.push({ tone: "info", what: `${unconfirmed} product${unconfirmed > 1 ? "s have" : " has"} a GST rate that isn't confirmed.`,
     why: "A wrong rate means wrong GST on every bill for that product.", action: "Compare with your supplier's GST bill for the same item (it shows HSN and rate), then confirm.", href: "/inventory", cta: "Review" });
+  const bs = await db.execute<{ last: string | null; open: number; banks: number }>(sql`SELECT (SELECT max(to_date) FROM bank_statements WHERE company_id = ${companyId}) last,
+    (SELECT count(*)::int FROM bank_statement_lines WHERE company_id = ${companyId} AND status = 'UNMATCHED') open,
+    (SELECT count(*)::int FROM bank_accounts WHERE company_id = ${companyId}) banks`);
+  const b = bs.rows[0];
+  if (b.banks > 0 && b.last && Date.parse(today) - Date.parse(b.last) > 35 * 86400000) out.push({ tone: "info", what: `Your last bank statement ends ${fmtDate(b.last)}.`,
+    why: "Entries since then haven't been checked against the bank.", action: "Download a new statement from net banking and upload it.", href: "/money/bank", cta: "Upload" });
+  else if (b.open > 0) out.push({ tone: "info", what: `${b.open} bank line${b.open > 1 ? "s aren't" : " isn't"} matched to your books yet.`,
+    why: "Something the bank shows may be missing from your books (charges, a payment received).", action: "Match or record them.", href: "/money/bank", cta: "Open" });
   const odd = (await findings(db, companyId, today)).open;
   const serious = odd.filter((f) => f.tone === "bad");
   if (odd.length) out.push({ tone: serious.length ? "warn" : "info", what: `${odd.length} thing${odd.length > 1 ? "s look" : " looks"} unusual${serious.length ? ` (${serious.length} to check now)` : ""}: ${odd[0].what}`,

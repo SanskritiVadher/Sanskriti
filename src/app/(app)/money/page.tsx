@@ -29,6 +29,7 @@ export default async function Money() {
         <LinkButton href="/money/new?type=receipt">+ Money in</LinkButton>
         <LinkButton href="/money/new?type=payment" variant="secondary">− Money out</LinkButton>
         <LinkButton href="/money/new?type=contra" variant="secondary">⇄ Cash ↔ bank</LinkButton>
+        <LinkButton href="/money/bank" variant="secondary">Bank statements</LinkButton>
       </div>} />
 
     <Card className="mb-6">

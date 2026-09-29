@@ -15,10 +15,12 @@ const READY = [
   { href: "/reports/profitability", title: "Where do I make money?", sub: "Profit by product, brand, customer and salesperson." },
   { href: "/inventory/insights", title: "What should I reorder?", sub: "Slow, dead and low stock, with reorder suggestions." },
   { href: "/assistant/checks", title: "Anything unusual?", sub: "Possible duplicates, below-cost sales, large cash, back-dated entries." },
+  { href: "/money/bank", title: "Does my bank agree?", sub: "Upload a bank statement; match it line by line with your books." },
+  { href: "/brief/week", title: "How did this week go?", sub: "This week against last week: sales, profit, collections, costs." },
   { href: "/reports/audit", title: "Who did what", sub: "Audit trail of every change, with before and after." },
 ];
 const LATER = [
-  ["Asking questions in plain words (needs an AI key)", 8], ["Bank reconciliation", 9],
+  ["Asking questions in plain words (needs an AI key)", 8], ["Backups, security review, speed", 10],
 ] as const;
 
 export default async function Reports() {

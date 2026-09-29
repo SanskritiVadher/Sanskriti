@@ -9,6 +9,7 @@ import { recordCustomerPayment, recordSupplierPayment } from "@/lib/services/par
 import { cashPaymentWarnings, cashReceiptWarnings } from "@/lib/services/sales";
 import { audit } from "@/lib/services/audit";
 import { markChecked } from "@/lib/analytics/anomalies";
+import { bankLineOfEntry, confirmMatch } from "@/lib/bank/reconcile";
 
 const s = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 
@@ -43,7 +44,20 @@ export async function confirmQuickEntryAction(f: FormData) {
     } else throw new UserFacingError("Choose what kind of entry this is.");
   } catch (e) {
     const msg = e instanceof UserFacingError ? e.message : "Couldn't save. Nothing was recorded.";
-    redirect(`/assistant?q=${encodeURIComponent(text)}&error=${encodeURIComponent(msg)}`);
+    redirect(`/assistant?q=${encodeURIComponent(text)}&kind=${kind}${s(f, "bankLine") ? `&bankLine=${s(f, "bankLine")}` : ""}&error=${encodeURIComponent(msg)}`);
+  }
+  // Recorded from a bank-statement line: match it straight away (only if amount and account still agree).
+  const bankLine = s(f, "bankLine");
+  if (bankLine) {
+    let matchErr = "";
+    try {
+      const acct = kind === "DEPOSIT" || kind === "WITHDRAW" ? null : cb;
+      const bl = await db.query.bankStatementLines.findFirst({ where: (t, { eq: e2 }) => e2(t.id, bankLine) });
+      const jl = bl && (acct ?? bl.accountId) === bl.accountId ? await bankLineOfEntry(db, entry!.id, bl.accountId) : null;
+      if (!jl) throw new UserFacingError("the entry isn't on that bank account");
+      await confirmMatch(db, { companyId: ctx.company.id, userId: ctx.user.id, bankLineId: bankLine, journalLineId: jl });
+    } catch (e) { matchErr = e instanceof UserFacingError ? e.message : "couldn't match"; }
+    warn = matchErr ? [...warn, `Saved, but not matched to the bank line: ${matchErr}. Match it on the bank page.`] : warn;
   }
   await audit(db, { companyId: ctx.company.id, userId: ctx.user.id, action: "assist.quick_entry", entityType: "journal_entry", entityId: entry!.id, after: { typed: text, kind }, source: "quick-entry" }).catch(() => {});
   redirect(`/reports/entry/${entry!.id}?saved=1${warn.length ? `&w=${encodeURIComponent(JSON.stringify(warn))}` : ""}`);

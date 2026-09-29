@@ -506,3 +506,41 @@ export const gstr2bImports = pgTable("gstr2b_imports", {
   createdBy: uuid("created_by").notNull().references(() => users.id, { onDelete: "restrict" }),
   createdAt: ts("created_at").notNull().defaultNow(),
 });
+
+/** A bank statement file the owner uploaded (CSV / Excel from net banking). */
+export const bankStatements = pgTable("bank_statements", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "restrict" }),
+  accountId: uuid("account_id").notNull().references(() => accounts.id, { onDelete: "restrict" }),
+  fileName: text("file_name").notNull(),
+  fromDate: date("from_date").notNull(),
+  toDate: date("to_date").notNull(),
+  openingBalance: money("opening_balance"),
+  closingBalance: money("closing_balance"),
+  lineCount: integer("line_count").notNull(),
+  skipped: integer("skipped").notNull().default(0),
+  createdBy: uuid("created_by").notNull().references(() => users.id, { onDelete: "restrict" }),
+  createdAt: ts("created_at").notNull().defaultNow(),
+});
+
+export const bankStatementLines = pgTable("bank_statement_lines", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  statementId: uuid("statement_id").notNull().references(() => bankStatements.id, { onDelete: "restrict" }),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "restrict" }),
+  accountId: uuid("account_id").notNull().references(() => accounts.id, { onDelete: "restrict" }),
+  lineNo: integer("line_no").notNull(),
+  txnDate: date("txn_date").notNull(),
+  narration: text("narration").notNull(),
+  ref: text("ref"),
+  withdrawal: money("withdrawal").notNull(),
+  deposit: money("deposit").notNull(),
+  balance: money("balance"),
+  /** Same date + amounts + narration + balance = same bank line; stops the same statement being imported twice. */
+  fingerprint: text("fingerprint").notNull(),
+  status: text("status").notNull().default("UNMATCHED"), // UNMATCHED | MATCHED | IGNORED
+  matchedLineId: uuid("matched_line_id").references(() => journalLines.id, { onDelete: "restrict" }),
+  matchedBy: uuid("matched_by").references(() => users.id, { onDelete: "restrict" }),
+  matchedAt: ts("matched_at"),
+  note: text("note"),
+}, (t) => [uniqueIndex("bsl_fingerprint_uq").on(t.accountId, t.fingerprint), index("bsl_company_date_idx").on(t.companyId, t.txnDate),
+  uniqueIndex("bsl_matched_line_uq").on(t.matchedLineId)]);

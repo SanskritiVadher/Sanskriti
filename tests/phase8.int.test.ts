@@ -80,3 +80,16 @@ describe("quick entry against real data", () => {
     expect(e.id).toBeTruthy();
   });
 });
+
+import { dailyBrief, weeklyReview } from "@/lib/services/brief";
+describe("brief", () => {
+  it("daily and weekly figures come from the books", async () => {
+    const d = await dailyBrief(db, cid, "2026-09-22");
+    expect(d.yday.received.toString()).toBe("210000"); // cash from Ramesh on 21 Sept
+    expect(d.text).toMatch(/Daily brief/);
+    const w = await weeklyReview(db, cid, "2026-09-22");
+    const sales = w.rows.find((r) => r.label.startsWith("Sales"))!;
+    expect(sales.now.toString()).toBe("4130"); // 3,500 + 18% GST, on 20 Sept
+    expect(w.rows.find((r) => r.label === "Running costs")!.now.toString()).toBe("15000");
+  });
+});

@@ -2,7 +2,7 @@
 
 Owner-first accounting, GST, billing and inventory for an Indian wholesale business (starting with SF Sonic and Usha).
 
-**Status: Phase 8 of 10.**
+**Status: Phase 9 of 10.**
 - Phase 1: setup, database, login and roles, design system, company setup wizard, default chart of accounts.
 - Phase 2: double-entry posting engine (enforced by database triggers), vouchers (money in/out, cash↔bank, adjustments), reversal instead of deletion, opening balances, trial balance, account statements, day book, owner/accountant view, system health, team password reset.
 - Phase 3: products (prices, HSN, owner-confirmed GST rate), weighted-average stock engine tied to the ledger, stock corrections, customers & suppliers with ledger-based dues, payments, WhatsApp reminders, Excel/CSV/Tally import with preview, guided corrections ("Fix a mistake"), stock and dues health checks.
@@ -11,6 +11,7 @@ Owner-first accounting, GST, billing and inventory for an Indian wholesale busin
 - Phase 6: profit & loss (trading + P&L, previous-period comparison, arithmetic 'why it changed'), balance sheet (owner's stake = capital + earlier years + this year, no closing entries), cash flow direct + indirect (both must equal actual cash change), Excel pack for the CA, audit trail viewer with before/after, financial-year locking (owner-only reopen).
 - Phase 7: business health (six plain answers, no single score), 21 ratios with meaning, benchmark source (your target > credit terms > your history > general reference) and 'show me why', profitability by product / brand / customer / salesperson net of returns, stock health (out / low / slow / dead / overstock), reorder suggestions only with enough sales history, owner targets and reorder settings.
 - Phase 8 (no AI key yet): Assistant page — quick entry that reads a typed sentence (English/Hinglish: names, amounts incl. k/lakh, cash/UPI, yesterday, dd/mm) into a proposal the owner reviews and confirms; nothing posts without the tick. 'Things that look unusual': 11 rule-based checks (duplicate bills/invoices, below-cost and unusually cheap sales, large amounts, back-dated entries, cash-rule breaches, over credit limit, many cancellations, expense jumps), each with why + action, 'checked, it's fine' is audited. Fixed: Money in form saved the entry and then showed an error.
+- Phase 9: bank reconciliation — upload CSV / .xlsx / bank '.xls' (HTML or tab text) statements; header detection for common Indian formats (separate Withdrawal/Deposit or Amount + Dr/Cr; newest-first handled); running-balance check before import; duplicate lines skipped on re-upload; match suggestions (same amount and direction, −2..+7 days, name bonus), owner confirms; 'Record it' turns a bank line into a proposed entry and matches it; 'Leave out' needs a reason; proof that book balance + unmatched items = bank balance, to the rupee; cancelled entries release their matches. Daily brief (Today) and weekly review with WhatsApp-to-self text. Home reminders for stale statements / unmatched lines.
 
 ### GST: free route
 The app does not connect to the GST portal. It prepares GSTR-1 (JSON for the portal's offline tool, and Excel for the CA) and reads GSTR-2B JSON that the owner downloads. Always validate the JSON in the portal's offline tool before filing: the portal schema changes over time.
