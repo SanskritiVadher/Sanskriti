@@ -125,7 +125,27 @@ export async function ledgerHealth(db: DB, companyId: string) {
   const badReversals = await db.execute<{ voucher_number: string }>(sql`
     SELECT e.voucher_number FROM journal_entries e WHERE e.company_id = ${companyId} AND e.status = 'REVERSED'
     AND NOT EXISTS (SELECT 1 FROM journal_entries r WHERE r.id = e.reversed_by_id AND r.reversal_of_id = e.id)`);
+  const inv = await db.execute<{ stock: string; ledger: string }>(sql`
+    SELECT (SELECT coalesce(sum(value),0) FROM inventory_transactions WHERE company_id = ${companyId}) AS stock,
+           (SELECT coalesce(sum(l.debit - l.credit),0) FROM journal_lines l JOIN accounts a ON a.id = l.account_id
+             WHERE l.company_id = ${companyId} AND a.system_key = 'INVENTORY') AS ledger`);
+  const stockV = D(inv.rows[0].stock), ledgerV = D(inv.rows[0].ledger);
+  const partyChk = await db.execute<{ k: string; total: string; tagged: string }>(sql`
+    SELECT a.system_key AS k, coalesce(sum(l.debit - l.credit),0) AS total,
+           coalesce(sum(CASE WHEN l.party_id IS NOT NULL THEN l.debit - l.credit ELSE 0 END),0) AS tagged
+    FROM accounts a LEFT JOIN journal_lines l ON l.account_id = a.id
+    WHERE a.company_id = ${companyId} AND a.system_key IN ('DEBTORS_CONTROL','CREDITORS_CONTROL') GROUP BY a.system_key`);
+  const partyOk = partyChk.rows.every((r) => D(r.total).eq(r.tagged));
+  const negStock = await db.execute<{ name: string }>(sql`
+    SELECT p.name FROM products p JOIN inventory_transactions t ON t.product_id = p.id
+    WHERE p.company_id = ${companyId} GROUP BY p.id HAVING sum(t.quantity) < 0`);
   return [
+    { name: "Stock value matches the books", ok: stockV.eq(ledgerV),
+      detail: stockV.eq(ledgerV) ? `Stock on hand is worth ${formatINR(stockV)}, same as in the accounts.` : `Stock records say ${formatINR(stockV)} but accounts say ${formatINR(ledgerV)}.` },
+    { name: "No product below zero", ok: negStock.rows.length === 0,
+      detail: negStock.rows.length ? `Below zero: ${negStock.rows.map((r) => r.name).join(", ")}` : "Every product has zero or more in stock." },
+    { name: "Customer & supplier dues add up", ok: partyOk,
+      detail: partyOk ? "Each customer's and supplier's balance adds up to the totals in the accounts." : "Some dues are not linked to a customer/supplier." },
     { name: "Every entry balances", ok: unbalanced.rows.length === 0,
       detail: unbalanced.rows.length ? `Unbalanced: ${unbalanced.rows.map((r) => r.voucher_number).join(", ")}` : "Debits equal credits in every entry." },
     { name: "No empty entries", ok: orphan.rows[0].n === 0, detail: orphan.rows[0].n ? `${orphan.rows[0].n} entries have no lines.` : "Every entry has its lines." },

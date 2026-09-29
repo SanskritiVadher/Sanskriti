@@ -2,9 +2,10 @@
 
 Owner-first accounting, GST, billing and inventory for an Indian wholesale business (starting with SF Sonic and Usha).
 
-**Status: Phase 2 of 10.**
+**Status: Phase 3 of 10.**
 - Phase 1: setup, database, login and roles, design system, company setup wizard, default chart of accounts.
 - Phase 2: double-entry posting engine (enforced by database triggers), vouchers (money in/out, cash↔bank, adjustments), reversal instead of deletion, opening balances, trial balance, account statements, day book, owner/accountant view, system health, team password reset.
+- Phase 3: products (prices, HSN, owner-confirmed GST rate), weighted-average stock engine tied to the ledger, stock corrections, customers & suppliers with ledger-based dues, payments, WhatsApp reminders, Excel/CSV/Tally import with preview, guided corrections ("Fix a mistake"), stock and dues health checks.
 Sections that aren't built yet say so plainly. They never show sample numbers.
 
 ## Stack

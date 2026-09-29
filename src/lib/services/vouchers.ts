@@ -109,7 +109,7 @@ export async function setOpeningBalances(db: DB, p: OpeningInput) {
 
     // Replace previous opening entry, if any, by reversing it.
     const prev = await tx.query.journalEntries.findFirst({
-      where: and(eq(schema.journalEntries.companyId, p.companyId), eq(schema.journalEntries.voucherType, "OPENING"), eq(schema.journalEntries.status, "POSTED")) });
+      where: and(eq(schema.journalEntries.companyId, p.companyId), eq(schema.journalEntries.voucherType, "OPENING"), eq(schema.journalEntries.sourceType, "opening"), eq(schema.journalEntries.status, "POSTED")) });
 
     if (!lines.length) {
       if (prev) await reverseInTx(tx, p, prev.id);
@@ -126,12 +126,12 @@ export async function setOpeningBalances(db: DB, p: OpeningInput) {
   });
 }
 
-async function reverseInTx(tx: Parameters<Parameters<DB["transaction"]>[0]>[0], p: { companyId: string; userId: string }, entryId: string) {
+export async function reverseInTx(tx: Parameters<Parameters<DB["transaction"]>[0]>[0], p: { companyId: string; userId: string }, entryId: string) {
   const orig = await tx.query.journalEntries.findFirst({ where: eq(schema.journalEntries.id, entryId) });
   const lines = await tx.query.journalLines.findMany({ where: eq(schema.journalLines.entryId, entryId) });
   const rev = await postEntryTx(tx, { companyId: p.companyId, userId: p.userId, voucherType: "REVERSAL", date: orig!.entryDate,
-    narration: `Reversal of ${orig!.voucherNumber}: opening balances updated`, reversalOfId: entryId, sourceType: "opening",
-    lines: lines.map((l) => ({ accountId: l.accountId, debit: l.credit, credit: l.debit })) });
+    narration: `Reversal of ${orig!.voucherNumber}: opening balance updated`, reversalOfId: entryId, sourceType: orig!.sourceType, sourceId: orig!.sourceId ?? undefined,
+    lines: lines.map((l) => ({ accountId: l.accountId, debit: l.credit, credit: l.debit, partyId: l.partyId ?? undefined })) });
   await tx.update(schema.journalEntries).set({ status: "REVERSED", reversedById: rev.id, reversalReason: "Opening balances updated" })
     .where(eq(schema.journalEntries.id, entryId));
   await audit(tx, { companyId: p.companyId, userId: p.userId, action: "ledger.reverse", entityType: "journal_entry", entityId: entryId,
@@ -141,7 +141,7 @@ async function reverseInTx(tx: Parameters<Parameters<DB["transaction"]>[0]>[0], 
 /** Current opening balances per account (from the active OPENING entry), on the natural side. */
 export async function currentOpening(db: DB, companyId: string) {
   const e = await db.query.journalEntries.findFirst({
-    where: and(eq(schema.journalEntries.companyId, companyId), eq(schema.journalEntries.voucherType, "OPENING"), eq(schema.journalEntries.status, "POSTED")) });
+    where: and(eq(schema.journalEntries.companyId, companyId), eq(schema.journalEntries.voucherType, "OPENING"), eq(schema.journalEntries.sourceType, "opening"), eq(schema.journalEntries.status, "POSTED")) });
   if (!e) return { entry: null, balances: {} as Record<string, string> };
   const rows = await db.select({ accountId: schema.journalLines.accountId, nature: schema.accounts.nature,
     dr: sql<string>`sum(${schema.journalLines.debit})`, cr: sql<string>`sum(${schema.journalLines.credit})` })

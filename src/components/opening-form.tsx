@@ -39,8 +39,8 @@ export async function OpeningForm({ companyId, back }: { companyId: string; back
       <Row id={byKey.get("BANK_LOAN")!.id} label="Loan outstanding (₹)" hint="Amount still to repay" />
       <Row id={byKey.get("CAPITAL")!.id} label="Owner's capital (₹) — optional" hint="Leave empty if unsure. The difference is recorded automatically." />
     </fieldset>
-    <Notice tone="info" title="Stock, customer dues and supplier dues come next.">
-      These need your product, customer and supplier lists, which arrive in Phase 3.</Notice>
+    <Notice tone="info" title="Stock, customer dues and supplier dues are entered separately.">
+      Add each product&rsquo;s stock in Inventory, and each customer&rsquo;s / supplier&rsquo;s old balance on their page, or import them all from Tally.</Notice>
     <p className="text-[13px] text-ink-3">How this balances: whatever the business owns minus what it owes is recorded as the owner&rsquo;s opening stake
       (&ldquo;Opening balances (setup)&rdquo;). Your accountant can move it to capital later.</p>
     <Button>Save opening balances</Button>

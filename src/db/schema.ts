@@ -190,12 +190,15 @@ export const journalLines = pgTable("journal_lines", {
   companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "restrict" }),
   accountId: uuid("account_id").notNull().references(() => accounts.id, { onDelete: "restrict" }),
   lineNo: integer("line_no").notNull(),
+  /** Customer/supplier this line belongs to. Required on the debtors/creditors control accounts. */
+  partyId: uuid("party_id").references((): AnyPgColumn => parties.id, { onDelete: "restrict" }),
   debit: money("debit").notNull().default("0"),
   credit: money("credit").notNull().default("0"),
   narration: text("narration"),
 }, (t) => [
   index("jl_account_idx").on(t.companyId, t.accountId),
   index("jl_entry_idx").on(t.entryId),
+  index("jl_party_idx").on(t.companyId, t.partyId),
   check("jl_non_negative", sql`${t.debit} >= 0 AND ${t.credit} >= 0`),
   check("jl_one_sided", sql`(${t.debit} = 0) <> (${t.credit} = 0)`),
 ]);
@@ -208,3 +211,111 @@ export const voucherSequences = pgTable("voucher_sequences", {
   periodId: uuid("period_id").notNull().references(() => financialPeriods.id, { onDelete: "restrict" }),
   nextNumber: integer("next_number").notNull().default(1),
 }, (t) => [uniqueIndex("vseq_uq").on(t.companyId, t.voucherType, t.periodId)]);
+
+// ───────────────────────── Phase 3: products, parties, inventory ─────────────────────────
+export const partyTypeEnum = pgEnum("party_type", ["CUSTOMER", "SUPPLIER"]);
+export const priceLevelEnum = pgEnum("price_level", ["DEALER", "WHOLESALE", "RETAIL"]);
+export const gstRateStatusEnum = pgEnum("gst_rate_status", ["USER_CONFIRMED", "UNVERIFIED"]);
+export const invTxnTypeEnum = pgEnum("inventory_txn_type", [
+  "OPENING", "PURCHASE", "SALE", "PURCHASE_RETURN", "SALES_RETURN", "ADJUSTMENT_IN", "ADJUSTMENT_OUT", "TRANSFER_IN", "TRANSFER_OUT",
+]);
+
+const qty = (n: string) => numeric(n, { precision: 14, scale: 3 });
+
+export const categories = pgTable("categories", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "restrict" }),
+  name: text("name").notNull(),
+}, (t) => [uniqueIndex("categories_company_name_uq").on(t.companyId, t.name)]);
+
+export const products = pgTable("products", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "restrict" }),
+  brandId: uuid("brand_id").references(() => brands.id, { onDelete: "restrict" }),
+  categoryId: uuid("category_id").references(() => categories.id, { onDelete: "restrict" }),
+  name: text("name").notNull(),
+  sku: text("sku").notNull(),
+  hsn: text("hsn"),
+  /** Owner-entered rate. Verified GST rules arrive in Phase 5; until then the status says so. */
+  gstRate: numeric("gst_rate", { precision: 5, scale: 2 }),
+  gstRateStatus: gstRateStatusEnum("gst_rate_status").notNull().default("UNVERIFIED"),
+  unit: text("unit").notNull().default("pcs"),
+  purchasePrice: money("purchase_price"),
+  dealerPrice: money("dealer_price"),
+  wholesalePrice: money("wholesale_price"),
+  retailPrice: money("retail_price"),
+  mrp: money("mrp"),
+  minSellingPrice: money("min_selling_price"),
+  reorderLevel: qty("reorder_level"),
+  trackSerial: boolean("track_serial").notNull().default(false),
+  warrantyMonths: integer("warranty_months"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: ts("created_at").notNull().defaultNow(),
+  updatedAt: ts("updated_at").notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("products_company_sku_uq").on(t.companyId, t.sku),
+  index("products_company_name_idx").on(t.companyId, t.name),
+]);
+
+export const parties = pgTable("parties", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "restrict" }),
+  type: partyTypeEnum("type").notNull(),
+  name: text("name").notNull(),
+  contactPerson: text("contact_person"),
+  phone: text("phone"),
+  whatsapp: text("whatsapp"),
+  email: text("email"),
+  gstin: text("gstin"),
+  stateCode: text("state_code"),
+  addressLine1: text("address_line1"),
+  city: text("city"),
+  pincode: text("pincode"),
+  creditLimit: money("credit_limit"),
+  creditDays: integer("credit_days"),
+  priceLevel: priceLevelEnum("price_level").notNull().default("DEALER"),
+  notes: text("notes"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: ts("created_at").notNull().defaultNow(),
+  updatedAt: ts("updated_at").notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("parties_company_type_name_uq").on(t.companyId, t.type, t.name),
+  index("parties_company_type_idx").on(t.companyId, t.type),
+]);
+
+/** Every stock movement. Quantity is signed (+in / −out); value is signed and in rupees. Never edited. */
+export const inventoryTransactions = pgTable("inventory_transactions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "restrict" }),
+  productId: uuid("product_id").notNull().references(() => products.id, { onDelete: "restrict" }),
+  warehouseId: uuid("warehouse_id").notNull().references(() => warehouses.id, { onDelete: "restrict" }),
+  txnDate: date("txn_date").notNull(),
+  type: invTxnTypeEnum("type").notNull(),
+  quantity: qty("quantity").notNull(),
+  unitCost: numeric("unit_cost", { precision: 18, scale: 4 }).notNull(),
+  value: money("value").notNull(),
+  entryId: uuid("entry_id").references(() => journalEntries.id, { onDelete: "restrict" }),
+  sourceType: text("source_type").notNull().default("manual"),
+  sourceId: text("source_id"),
+  note: text("note"),
+  createdBy: uuid("created_by").notNull().references(() => users.id, { onDelete: "restrict" }),
+  createdAt: ts("created_at").notNull().defaultNow(),
+}, (t) => [
+  index("inv_company_product_idx").on(t.companyId, t.productId),
+  index("inv_entry_idx").on(t.entryId),
+  check("inv_qty_nonzero", sql`${t.quantity} <> 0`),
+  check("inv_sign_match", sql`(${t.quantity} > 0 AND ${t.value} >= 0) OR (${t.quantity} < 0 AND ${t.value} <= 0)`),
+]);
+
+/** Parsed uploads waiting for the owner to review and confirm. */
+export const importBatches = pgTable("import_batches", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "restrict" }),
+  kind: text("kind").notNull(), // products | customers | suppliers
+  fileName: text("file_name").notNull(),
+  rows: jsonb("rows").notNull(),
+  status: text("status").notNull().default("PREVIEW"), // PREVIEW | IMPORTED | DISCARDED
+  summary: jsonb("summary"),
+  createdBy: uuid("created_by").notNull().references(() => users.id, { onDelete: "restrict" }),
+  createdAt: ts("created_at").notNull().defaultNow(),
+});

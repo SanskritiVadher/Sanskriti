@@ -54,7 +54,7 @@ export default async function Money() {
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-[18px] font-semibold">Recent entries</h2>
         <div className="flex gap-3 text-[14px]">
-          {can(ctx.role, "ledger.post_manual") && <Link className="text-brand underline" href="/money/new?type=journal">Adjustment entry</Link>}
+          {can(ctx.role, "money.record") && <Link className="text-brand underline" href="/money/fix">Fix a mistake</Link>}
           <Link className="text-brand underline" href="/reports/day-book">All entries</Link>
         </div>
       </div>

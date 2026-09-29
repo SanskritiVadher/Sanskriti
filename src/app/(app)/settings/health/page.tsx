@@ -3,7 +3,7 @@ import { db } from "@/db";
 import { ledgerHealth } from "@/lib/accounting/reports";
 import { Card, PageHeader, Status } from "@/components/ui";
 
-const LATER = ["Inventory matches stock records (Phase 3)", "GST reconciliation (Phase 5)", "Bank reconciliation (Phase 9)"];
+const LATER = ["GST reconciliation (Phase 5)", "Bank reconciliation (Phase 9)"];
 
 export default async function Health() {
   const ctx = await requireContext("reports.financial");

@@ -5,6 +5,9 @@ import { requireContext } from "@/lib/session";
 import { stateByCode } from "@/lib/gst/states";
 import { Card, Notice, PageHeader, Status } from "@/components/ui";
 import { moneyPosition } from "@/lib/accounting/reports";
+import { partyBalances } from "@/lib/services/parties";
+import { stockList } from "@/lib/services/inventory";
+import { D } from "@/lib/money";
 import { formatINRShort } from "@/lib/money";
 import { todayIST } from "@/lib/dates";
 
@@ -25,12 +28,26 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ w
 
   const money = await moneyPosition(db, c.id, todayIST());
   const [{ n: entryCount }] = await db.select({ n: sql<number>`count(*)::int` }).from(schema.journalEntries).where(eq(schema.journalEntries.companyId, c.id));
+  const [custBal, supBal, stock] = await Promise.all([partyBalances(db, c.id, "CUSTOMER"), partyBalances(db, c.id, "SUPPLIER"), stockList(db, c.id)]);
+  const toCollect = [...custBal.values()].filter((b) => b.balance.gt(0));
+  const collectTotal = toCollect.reduce((s, b) => s.plus(b.balance), D(0));
+  const toPay = [...supBal.values()].filter((b) => b.balance.gt(0)).reduce((s, b) => s.plus(b.balance), D(0));
+  const stockValue = stock.filter((r) => r.isActive).reduce((s, r) => s.plus(r.value), D(0));
+  const lowCount = stock.filter((r) => r.isActive && (r.status === "LOW" || r.status === "OUT")).length;
+  const tiles = [
+    { label: "Cash and bank", value: money.total, note: "Money you can use today", href: "/money" },
+    { label: "Customers owe you", value: collectTotal, note: toCollect.length ? `${toCollect.length} customer${toCollect.length === 1 ? "" : "s"}` : "Nothing due", href: "/customers" },
+    { label: "You owe suppliers", value: toPay, note: toPay.gt(0) ? "Due to suppliers" : "Nothing due", href: "/suppliers" },
+    { label: "Stock value", value: stockValue, note: lowCount ? `${lowCount} item${lowCount === 1 ? "" : "s"} low or out` : stock.length ? "No items running low" : "No products yet", href: "/inventory", warn: lowCount > 0 },
+  ];
   const checks = [
     { label: "Business details", done: !!(c.addressLine1 && c.stateCode), href: "/setup?step=1" },
     { label: c.gstRegistration === "UNREGISTERED" ? "GST: not registered" : "GST number", done: c.gstRegistration === "UNREGISTERED" || !!c.gstin, href: "/setup?step=2" },
     { label: "Bank account", done: banks[0].n > 0, href: "/setup?step=3" },
     { label: "Brands", done: brands.length > 0, href: "/setup?step=4" },
     { label: "Opening balances", done: !!c.booksBeginOn, href: "/settings/opening" },
+    { label: "Products", done: stock.length > 0, href: "/inventory" },
+    { label: "Customers", done: custBal.size > 0 || (await db.select({ n: sql<number>`count(*)::int` }).from(schema.parties).where(and(eq(schema.parties.companyId, c.id), eq(schema.parties.type, "CUSTOMER"))))[0].n > 0, href: "/customers" },
   ];
 
   return <>
@@ -40,11 +57,12 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ w
 
     <Card className="mb-6">
       <h2 className="text-[18px] font-semibold">Your business pulse</h2>
-      {entryCount > 0 && <div className="mt-3 flex flex-wrap items-baseline justify-between gap-2 rounded-xl bg-surface-2 px-4 py-3">
-        <div><p className="text-[14px] text-ink-2">Cash and bank today</p>
-          <p className="num text-[26px] font-semibold">{formatINRShort(money.total)}</p></div>
-        <Link href="/money" className="text-[14px] text-brand underline">Where is it? →</Link></div>}
-      <p className="mt-3 text-ink-2">Sales and purchases aren&rsquo;t recorded yet (billing arrives in Phase 4), so there&rsquo;s no profit or sales trend to explain yet.
+      {entryCount > 0 && <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{tiles.map((t) =>
+        <Link key={t.label} href={t.href} className="rounded-xl bg-surface-2 px-4 py-3 hover:ring-1 hover:ring-brand">
+          <p className="text-[13px] text-ink-2">{t.label}</p>
+          <p className="num text-[24px] font-semibold">{formatINRShort(t.value)}</p>
+          <p className={`text-[13px] ${t.warn ? "text-warn" : "text-ink-3"}`}>{t.warn ? "⚠ " : ""}{t.note}</p></Link>)}</div>}
+      <p className="mt-4 text-ink-2">Sales and purchases aren&rsquo;t recorded yet (billing arrives in Phase 4), so there&rsquo;s no profit or sales trend to explain yet.
         Once billing is live, this space will tell you how sales, profit, cash, dues and stock are moving, and why.</p>
       <p className="mt-3 text-[13px] text-ink-3">We never show made-up numbers here. Every figure will come from your own records.</p>
     </Card>

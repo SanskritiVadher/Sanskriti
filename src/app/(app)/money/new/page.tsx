@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { requireContext } from "@/lib/session";
-import { can } from "@/lib/permissions";
 import { accountOptions } from "@/lib/accounting/options";
 import { getViewMode } from "@/lib/view-mode";
 import { todayIST } from "@/lib/dates";
@@ -12,7 +11,7 @@ const COPY = {
   receipt: { title: "Money in", sub: "Money received into cash or bank — e.g. capital put in, a loan received, other income." },
   payment: { title: "Money out", sub: "Money paid from cash or bank — e.g. rent, salaries, electricity, owner's drawings." },
   contra: { title: "Move money between cash and bank", sub: "Cash deposited in bank, cash withdrawn, or a transfer between your own accounts." },
-  journal: { title: "Adjustment entry", sub: "For accountants: any balanced entry. Total debits must equal total credits." },
+  journal: { title: "Advanced: manual journal entry", sub: "For CAs. Total debits must equal total credits. Customer/supplier dues and stock can't be changed here — use their own screens." },
 } as const;
 
 type SP = { type?: string; error?: string; field?: string; amount?: string; narration?: string; date?: string };
@@ -22,7 +21,8 @@ export default async function NewEntry({ searchParams }: { searchParams: Promise
   const type = (["receipt", "payment", "contra", "journal"].includes(sp.type ?? "") ? sp.type : "receipt") as keyof typeof COPY;
   const ctx = await requireContext(type === "journal" ? "ledger.post_manual" : "money.record");
   const accountant = (await getViewMode()) === "accountant" || type === "journal";
-  const opts = await accountOptions(ctx.company.id, accountant);
+  // Customer/supplier dues and stock value are changed only through their own screens, never raw entries.
+  const opts = (await accountOptions(ctx.company.id, accountant)).filter((o) => !["DEBTORS_CONTROL", "CREDITORS_CONTROL", "INVENTORY", "COGS"].includes(o.systemKey ?? ""));
   const cashBank = opts.filter((o) => o.groupCode === "1110" || o.groupCode === "1120");
   const others = opts.filter((o) => !(o.groupCode === "1110" || o.groupCode === "1120"));
   // Sensible, short lists for owners; full list for accountants.
@@ -36,8 +36,7 @@ export default async function NewEntry({ searchParams }: { searchParams: Promise
     <div className="mb-6 flex flex-wrap gap-2 text-[14px]">
       {(["receipt", "payment", "contra"] as const).map((t) => <Link key={t} href={`/money/new?type=${t}`}
         className={`rounded-full px-3 py-1 ${t === type ? "bg-brand text-brand-ink" : "bg-surface-2 text-ink-2"}`}>{COPY[t].title.split(" between")[0]}</Link>)}
-      {can(ctx.role, "ledger.post_manual") && <Link href="/money/new?type=journal"
-        className={`rounded-full px-3 py-1 ${type === "journal" ? "bg-brand text-brand-ink" : "bg-surface-2 text-ink-2"}`}>Adjustment</Link>}
+      <Link href="/money/fix" className="rounded-full bg-surface-2 px-3 py-1 text-ink-2">Fix a mistake</Link>
     </div>
     {sp.error && !sp.field && <div className="mb-4"><Notice tone="bad" title={sp.error} /></div>}
     <Card>
@@ -48,13 +47,15 @@ export default async function NewEntry({ searchParams }: { searchParams: Promise
           <Input name="amount" inputMode="decimal" defaultValue={sp.amount} placeholder="e.g. 25000" required className="num" /></Field>}
 
         {type === "receipt" && <>
+          <p className="text-[14px] text-ink-2 sm:col-span-2">Money from a customer? Record it on <Link className="text-brand underline" href="/customers">the customer&rsquo;s page</Link> so their balance goes down.</p>
           <Field label="Received into" error={err("cashBankId")}><AccountSelect name="cashBankId" options={cashBank} defaultValue={cashBank[0]?.id} /></Field>
-          <Field label="Received from / for" hint="Customer payments come with billing (Phase 4)." error={err("fromAccountId")}>
+          <Field label="Received from / for" error={err("fromAccountId")}>
             <AccountSelect name="otherId" options={receiptFrom} /></Field>
         </>}
         {type === "payment" && <>
+          <p className="text-[14px] text-ink-2 sm:col-span-2">Paying a supplier? Record it on <Link className="text-brand underline" href="/suppliers">the supplier&rsquo;s page</Link>.</p>
           <Field label="Paid from" error={err("cashBankId")}><AccountSelect name="cashBankId" options={cashBank} defaultValue={cashBank[0]?.id} /></Field>
-          <Field label="Paid for" hint="Supplier payments come with purchases (Phase 4)." error={err("toAccountId")}>
+          <Field label="Paid for" error={err("toAccountId")}>
             <AccountSelect name="otherId" options={paymentTo} /></Field>
         </>}
         {type === "contra" && <>

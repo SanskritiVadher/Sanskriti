@@ -46,3 +46,7 @@ html { font-size: 16px; }
 body { background: var(--bg); color: var(--ink); font-family: var(--font-sans); -webkit-font-smoothing: antialiased; }
 .num { font-variant-numeric: tabular-nums; }
 :focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: 6px; }
+
+/* Consistent breathing room between table columns */
+table th, table td { padding-right: 0.75rem; }
+table th:last-child, table td:last-child { padding-right: 0; }

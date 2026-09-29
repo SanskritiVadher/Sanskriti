@@ -22,8 +22,8 @@ export default async function Setup({ searchParams }: { searchParams: Promise<{ 
     <ol className="mt-6 mb-8 flex flex-wrap gap-2" aria-label="Setup steps">
       {STEPS.map((s, i) => <li key={s}>
         <Link href={`/setup?step=${i + 1}`} aria-current={step === i + 1 ? "step" : undefined}
-          className={`rounded-full px-3 py-1 text-[13px] ${step === i + 1 ? "bg-brand text-brand-ink" : i + 1 < c.setupStep && !(i >= 4 && i <= 5) ? "bg-good-bg text-good" : "bg-surface-2 text-ink-2"}`}>
-          {i + 1 < c.setupStep && step !== i + 1 ? (i >= 4 && i <= 5 ? "– " : "✓ ") : `${i + 1}. `}{s}</Link></li>)}
+          className={`rounded-full px-3 py-1 text-[13px] ${step === i + 1 ? "bg-brand text-brand-ink" : i + 1 < c.setupStep && true ? "bg-good-bg text-good" : "bg-surface-2 text-ink-2"}`}>
+          {i + 1 < c.setupStep && step !== i + 1 ? "✓ " : `${i + 1}. `}{s}</Link></li>)}
     </ol>
     {sp.error && !sp.field && <div className="mb-4"><Notice tone="bad" title={sp.error} /></div>}
 
@@ -84,9 +84,9 @@ export default async function Setup({ searchParams }: { searchParams: Promise<{ 
 
     {(step === 5 || step === 6) && <Card>
       <h2 className="text-[22px] font-semibold">{STEPS[step - 1]}</h2>
-      <div className="my-6"><Notice tone="info" title="Not built yet">
-        {step === 5 && "Adding customers arrives in the next update (Phase 3). You'll be able to add them one by one or import from Excel."}
-        {step === 6 && "Adding suppliers arrives in the next update (Phase 3)."}
+      <div className="my-6"><Notice tone="info" title="Do this after setup">
+        {step === 5 && "You can add customers one by one, or import your list from Tally / Excel, from the Customers page after setup."}
+        {step === 6 && "You can add suppliers, or import them from Tally / Excel, from the Suppliers page after setup."}
       </Notice></div>
       <form action={goToStepAction} className="flex justify-between">
         <Link href={`/setup?step=${step - 1}`} className="py-2.5 text-ink-2">← Back</Link>

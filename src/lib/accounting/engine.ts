@@ -24,6 +24,12 @@ export type LineInput = {
   debit?: Decimal.Value;
   credit?: Decimal.Value;
   narration?: string;
+  /** Customer/supplier — required on DEBTORS_CONTROL / CREDITORS_CONTROL. */
+  partyId?: string;
+};
+
+const PARTY_KEYS: Record<string, "CUSTOMER" | "SUPPLIER"> = {
+  DEBTORS_CONTROL: "CUSTOMER", CUSTOMER_ADVANCES: "CUSTOMER", CREDITORS_CONTROL: "SUPPLIER", SUPPLIER_ADVANCES: "SUPPLIER",
 };
 
 export type PostInput = {
@@ -114,8 +120,23 @@ export async function postEntryTx(tx: Tx, input: PostInput) {
     const acc = l.accountId ? byId.get(l.accountId) : byKey.get(l.systemKey!);
     if (!acc) throw new LedgerError(`Line ${i + 1}: account not found in this business.`);
     if (!acc.isActive) throw new LedgerError(`Line ${i + 1}: "${acc.ownerLabel}" is inactive.`);
-    return { ...l, account: acc };
+    const needs = acc.systemKey ? PARTY_KEYS[acc.systemKey] : undefined;
+    if (l.partyId && !needs) throw new LedgerError(`Line ${i + 1}: a customer/supplier can't be tagged on "${acc.ownerLabel}".`);
+    if (!l.partyId && (acc.systemKey === "DEBTORS_CONTROL" || acc.systemKey === "CREDITORS_CONTROL"))
+      throw new LedgerError(`Line ${i + 1}: choose which ${needs === "CUSTOMER" ? "customer" : "supplier"} this is for.`);
+    return { ...l, account: acc, needs };
   });
+  const partyIds = [...new Set(resolved.filter((l) => l.partyId).map((l) => l.partyId!))];
+  if (partyIds.length) {
+    const ps = await tx.query.parties.findMany({ where: and(eq(schema.parties.companyId, input.companyId), inArray(schema.parties.id, partyIds)) });
+    const pm = new Map(ps.map((p) => [p.id, p]));
+    resolved.forEach((l, i) => {
+      if (!l.partyId) return;
+      const p = pm.get(l.partyId);
+      if (!p) throw new LedgerError(`Line ${i + 1}: customer/supplier not found in this business.`);
+      if (p.type !== l.needs) throw new LedgerError(`Line ${i + 1}: "${l.account.ownerLabel}" needs a ${l.needs === "CUSTOMER" ? "customer" : "supplier"}.`);
+    });
+  }
 
   const period = await periodFor(tx, input.companyId, input.date);
   const voucherNumber = await nextVoucherNumber(tx, input.companyId, input.voucherType, period);
@@ -126,12 +147,12 @@ export async function postEntryTx(tx: Tx, input: PostInput) {
     createdBy: input.userId,
   }).returning();
   await tx.insert(schema.journalLines).values(resolved.map((l, i) => ({
-    entryId: entry.id, companyId: input.companyId, accountId: l.account.id, lineNo: i + 1,
+    entryId: entry.id, companyId: input.companyId, accountId: l.account.id, lineNo: i + 1, partyId: l.partyId ?? null,
     debit: toDb(l.debit), credit: toDb(l.credit), narration: l.narration?.trim() || null,
   })));
   await audit(tx, { companyId: input.companyId, userId: input.userId, action: "ledger.post", entityType: "journal_entry",
     entityId: entry.id, after: { voucherNumber, type: input.voucherType, date: input.date, total: toDb(total),
-      lines: resolved.map((l) => ({ account: l.account.code, dr: toDb(l.debit), cr: toDb(l.credit) })) },
+      lines: resolved.map((l) => ({ account: l.account.code, party: l.partyId, dr: toDb(l.debit), cr: toDb(l.credit) })) },
     source: input.sourceType === "ai" ? "ai" : "app" });
   return entry;
 }
@@ -155,7 +176,7 @@ export async function reverseEntry(db: DB, p: { companyId: string; userId: strin
       companyId: p.companyId, userId: p.userId, voucherType: "REVERSAL", date: p.date ?? orig.entryDate,
       narration: `Reversal of ${orig.voucherNumber}: ${p.reason.trim()}`, reversalOfId: orig.id,
       sourceType: orig.sourceType, sourceId: orig.sourceId ?? undefined,
-      lines: lines.map((l) => ({ accountId: l.accountId, debit: l.credit, credit: l.debit, narration: l.narration ?? undefined })),
+      lines: lines.map((l) => ({ accountId: l.accountId, debit: l.credit, credit: l.debit, narration: l.narration ?? undefined, partyId: l.partyId ?? undefined })),
     });
     await tx.update(schema.journalEntries).set({ status: "REVERSED", reversedById: rev.id, reversalReason: p.reason.trim() })
       .where(eq(schema.journalEntries.id, orig.id));

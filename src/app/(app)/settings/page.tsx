@@ -21,6 +21,7 @@ export default async function Settings({ searchParams }: { searchParams: Promise
       {can(ctx.role, "ledger.post_manual") && <Link href="/settings/opening" className="rounded-lg border border-line bg-surface px-4 py-2">Opening balances</Link>}
       {can(ctx.role, "reports.financial") && <Link href="/settings/health" className="rounded-lg border border-line bg-surface px-4 py-2">System health</Link>}
       <Link href="/settings/password" className="rounded-lg border border-line bg-surface px-4 py-2">Change my password</Link>
+      {can(ctx.role, "ledger.post_manual") && <Link href="/money/new?type=journal" className="rounded-lg border border-line bg-surface px-4 py-2 text-ink-2">Advanced: manual journal</Link>}
       {edit && <Link href="/setup?step=3" className="rounded-lg border border-line bg-surface px-4 py-2">Bank accounts</Link>}
       {edit && <Link href="/setup?step=4" className="rounded-lg border border-line bg-surface px-4 py-2">Brands</Link>}
     </div>

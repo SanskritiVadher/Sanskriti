@@ -5,9 +5,6 @@ import { Card, Notice, PageHeader } from "@/components/ui";
 const SECTIONS: Record<string, { title: string; q: string; phase: number; what: string }> = {
   sell: { title: "Sell", q: "Create bills fast", phase: 4, what: "Fast wholesale billing with automatic GST, credit-limit and margin checks." },
   buy: { title: "Buy", q: "Record purchases", phase: 4, what: "Purchase orders, purchase bills, returns and supplier price history." },
-  inventory: { title: "Inventory", q: "What stock do I have?", phase: 3, what: "Products, stock levels, low-stock and slow-moving stock." },
-  customers: { title: "Customers", q: "Who owes me money?", phase: 3, what: "Customer profiles that explain dues and payment behaviour." },
-  suppliers: { title: "Suppliers", q: "Whom do I need to pay?", phase: 3, what: "Supplier profiles, dues and pricing history." },
   gst: { title: "GST", q: "Is my GST in order?", phase: 5, what: "Your GST position, input vs output, and items needing review." },
   assistant: { title: "AI Assistant", q: "Ask anything about your business", phase: 8, what: "Answers grounded only in your own records. It will never post entries without your approval." },
 };
