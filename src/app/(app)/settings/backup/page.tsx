@@ -14,7 +14,8 @@ export default async function Backup() {
     <PageHeader title="Backup" subtitle="A complete copy of your books that you keep yourself." />
     <Card className="mb-6">
       <p>{l.at ? <>Last backup: <b>{days === 0 ? "today" : `${days} day${days === 1 ? "" : "s"} ago`}</b>{l.who ? ` by ${l.who}` : ""}.</> : <b>No backup downloaded yet.</b>}</p>
-      {ctx.role === "OWNER" ? <a href="/api/backup" className="mt-4 inline-block rounded-lg bg-brand px-4 py-2.5 font-medium text-brand-ink">Download backup now</a>
+      {ctx.role === "OWNER" ? <form method="get" action="/api/backup" className="mt-4">
+          <button className="rounded-lg bg-brand px-4 py-2.5 font-medium text-brand-ink">Download backup now</button></form>
         : <p className="mt-3 text-[14px] text-ink-2">Only the owner can download a backup, because it contains everyone&rsquo;s login details.</p>}
       <ul className="mt-4 list-disc space-y-1 pl-5 text-[14px] text-ink-2">
         <li>Download one every week, and before any big change. Keep it on your computer <b>and</b> in Google Drive or email to yourself.</li>
