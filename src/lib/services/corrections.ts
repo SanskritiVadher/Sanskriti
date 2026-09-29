@@ -63,17 +63,28 @@ export async function ownerMoney(db: DB, p: Base & { cashBankId: string; directi
       : [{ accountId: cb.id, debit: a }, { systemKey: "CAPITAL", credit: a }] });
 }
 
-/** "My van / equipment has lost value": depreciation. Amount comes from the owner or CA; we don't invent rates. */
-export async function depreciation(db: DB, p: Base & { assetId: string }) {
-  const a = amt(p.amount);
+/** "My van / equipment has lost value": depreciation. The owner enters the amount (a calculator suggests one from a rate he chooses). */
+/**
+ * Either give the amount, or give a yearly rate (%) and the app works it out on the current book value
+ * (written-down value). `halfYear` halves it — income-tax practice for assets used under 180 days in the year.
+ */
+export async function depreciation(db: DB, p: Omit<Base, "amount"> & { amount?: string; assetId: string; ratePct?: string; halfYear?: boolean }) {
   const asset = await account(db, p.companyId, p.assetId);
   if (asset.groupCode !== "1200") throw new LedgerError("Choose a long-term asset like vehicles or furniture.", "assetId");
   const tb = await trialBalance(db, p.companyId, p.date);
   const row = tb.rows.find((r) => r.accountId === asset.id)!;
   const bal = naturalBalance(row.nature, row.totalDebit, row.totalCredit);
+  let a: string;
+  if (p.amount?.trim()) a = amt(p.amount);
+  else {
+    const r = (p.ratePct ?? "").trim();
+    if (!/^\d{1,3}(\.\d{1,2})?$/.test(r) || D(r).lte(0) || D(r).gt(100)) throw new LedgerError("Enter the amount, or a yearly rate like 15.", "amount");
+    a = toDb(bal.mul(r).div(100).mul(p.halfYear ? 0.5 : 1));
+    if (D(a).lte(0)) throw new LedgerError(`"${asset.ownerLabel}" has no value left to depreciate.`, "assetId");
+  }
   if (bal.lt(a)) throw new LedgerError(`"${asset.ownerLabel}" is only recorded at ${bal.toFixed(2)}. Depreciation can't be more than that.`, "amount");
   return postEntry(db, { companyId: p.companyId, userId: p.userId, voucherType: "JOURNAL", date: p.date, sourceType: "correction",
-    narration: note(p.note, `Depreciation: ${asset.ownerLabel}`),
+    narration: note(p.note, `Depreciation: ${asset.ownerLabel}${p.ratePct && !p.amount?.trim() ? ` @ ${p.ratePct}%${p.halfYear ? " (half year)" : ""} on ${bal.toFixed(2)}` : ""}`),
     lines: [{ systemKey: "DEPRECIATION", debit: a }, { accountId: asset.id, credit: a }] });
 }
 
@@ -87,5 +98,7 @@ export async function correctionOptions(db: DB, companyId: string) {
     income: o(accs.filter((a) => a.nature === "INCOME" && !["SALES", "SALES_RETURNS"].includes(a.systemKey ?? ""))),
     cashBank: o(accs.filter((a) => CASH_BANK.includes(byCode.get(a.groupId)!))),
     fixed: o(accs.filter((a) => byCode.get(a.groupId) === "1200")),
+    fixedValues: await (async () => { const tb = await trialBalance(db, companyId, "9999-12-31");
+      return Object.fromEntries(tb.rows.filter((r) => r.code.startsWith("12")).map((r) => [r.accountId, naturalBalance(r.nature, r.totalDebit, r.totalCredit).toFixed(2)])); })(),
   };
 }

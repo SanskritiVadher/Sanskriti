@@ -65,7 +65,7 @@ export default async function Setup({ searchParams }: { searchParams: Promise<{ 
         {c.gstin && !sp.error && <Notice tone="good" title={`GSTIN format is valid · ${stateByCode(c.stateCode)?.name ?? ""}`}>
           We checked the format and check-digit offline. We have not confirmed it is active on the GST portal — live verification is not connected yet.</Notice>}
         {c.gstRegistration === "COMPOSITION" && <Notice tone="warn" title="Composition scheme">
-          Composition dealers cannot charge GST on invoices or claim input GST. Billing will follow this in Phase 5. Please confirm with your CA.</Notice>}
+          Composition dealers cannot charge GST on invoices or claim input GST. Bills will be made without GST.</Notice>}
         <div className="flex justify-between"><Link href="/setup?step=1" className="py-2.5 text-ink-2">← Back</Link><Button>Save and continue</Button></div>
       </form>
     </Card>}

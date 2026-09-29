@@ -5,7 +5,12 @@ import { requireContext } from "@/lib/session";
 import { stateByCode } from "@/lib/gst/states";
 import { Card, Notice, PageHeader, Status } from "@/components/ui";
 import { moneyPosition } from "@/lib/accounting/reports";
+import { businessHealth } from "@/lib/analytics/health";
+import { resolveRange } from "@/components/range-picker";
+import { RatioStatus } from "@/components/status-badge";
+import { can } from "@/lib/permissions";
 import { attentionItems, salesChange } from "@/lib/services/attention";
+import { profitAndLoss } from "@/lib/accounting/statements";
 import { partyBalances } from "@/lib/services/parties";
 import { stockList } from "@/lib/services/inventory";
 import { D } from "@/lib/money";
@@ -38,7 +43,11 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ w
   const [attention, change] = await Promise.all([attentionItems(db, c.id), salesChange(db, c.id)]);
   const pct = (a: typeof change.now.sales, b: typeof change.now.sales) => (b.isZero() ? null : a.minus(b).div(b).mul(100));
   const salesPct = pct(change.now.sales, change.prev.sales), profitPct = pct(change.now.profit, change.prev.profit);
+  const monthPl = await profitAndLoss(db, c.id, todayIST().slice(0, 8) + "01", todayIST());
+  const q = resolveRange({ range: "quarter" });
+  const health = entryCount > 0 && can(ctx.role, "reports.financial") ? await businessHealth(db, c.id, q.from, q.to) : null;
   const tiles = [
+    { label: "Profit this month", value: monthPl.netProfit, note: monthPl.netMargin ? `₹${monthPl.netMargin.toFixed(1)} kept per ₹100 sold` : "After all recorded costs", href: "/reports/profit", warn: monthPl.netProfit.lt(0) },
     { label: "Cash and bank", value: money.total, note: "Money you can use today", href: "/money" },
     { label: "Customers owe you", value: collectTotal, note: toCollect.length ? `${toCollect.length} customer${toCollect.length === 1 ? "" : "s"}` : "Nothing due", href: "/customers" },
     { label: "You owe suppliers", value: toPay, note: toPay.gt(0) ? "Due to suppliers" : "Nothing due", href: "/suppliers" },
@@ -61,7 +70,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ w
 
     <Card className="mb-6">
       <h2 className="text-[18px] font-semibold">Your business pulse</h2>
-      {entryCount > 0 && <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{tiles.map((t) =>
+      {entryCount > 0 && <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">{tiles.map((t) =>
         <Link key={t.label} href={t.href} className="rounded-xl bg-surface-2 px-4 py-3 hover:ring-1 hover:ring-brand">
           <p className="text-[13px] text-ink-2">{t.label}</p>
           <p className="num text-[24px] font-semibold">{formatINRShort(t.value)}</p>
@@ -77,6 +86,13 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ w
           <p className="text-[14px] text-ink-2">{a.why} <span className="text-ink">{a.action}</span></p></div>
         <Link href={a.href} className="rounded-lg border border-line bg-surface px-3 py-1.5 text-[14px]">{a.cta}</Link></li>)}</ul>}
     </Card>
+
+    {health && <Card className="mb-6">
+      <div className="flex flex-wrap items-baseline justify-between gap-2"><h2 className="text-[18px] font-semibold">Business health</h2><Link href="/reports/health" className="text-[14px] text-brand underline">See why</Link></div>
+      <ul className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{health.map((p) => <li key={p.key}><Link href={p.href} className="flex items-center justify-between gap-2 rounded-xl bg-surface-2 px-4 py-2.5 hover:ring-1 hover:ring-brand">
+        <span>{p.title}</span><RatioStatus s={p.status} /></Link></li>)}</ul>
+      <p className="mt-2 text-[13px] text-ink-3">This quarter so far, from your own records.</p>
+    </Card>}
 
     {change.hasData && <Card className="mb-6">
       <h2 className="text-[18px] font-semibold">What changed this month</h2>

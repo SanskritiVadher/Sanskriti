@@ -21,7 +21,7 @@ export default async function Pay({ searchParams }: { searchParams: Promise<{ pe
       <p className="text-[17px]">Your books say GST to pay in cash is <b className="num">{formatINR(s.cashTotal)}</b>, after using {formatINR(s.used.igst.igst.plus(s.used.igst.cgst).plus(s.used.igst.sgst).plus(s.used.cgst.cgst).plus(s.used.cgst.igst).plus(s.used.sgst.sgst).plus(s.used.sgst.igst))} of purchase credit.</p>
       <ul className="mt-2 text-[14px] text-ink-2"><li>IGST {formatINR(s.cash.igst)} · CGST {formatINR(s.cash.cgst)} · SGST {formatINR(s.cash.sgst)}</li>
         <li>Credit left over: IGST {formatINR(s.carryForward.igst)} · CGST {formatINR(s.carryForward.cgst)} · SGST {formatINR(s.carryForward.sgst)}</li></ul>
-      <p className="mt-3 text-[13px] text-ink-3">Record this only after the payment is actually made on the portal (or by your CA). If the portal amount differs, ask your CA before recording.</p>
+      <p className="mt-3 text-[13px] text-ink-3">Record this only after you have actually paid on the GST portal. If the portal asked for a different amount, check the 2B match and Items requiring review first, and record what you actually paid.</p>
     </Card>
     <Card><form action={gstPaymentAction} className="grid gap-4 sm:grid-cols-3">
       <input type="hidden" name="asOf" value={per.to} /><input type="hidden" name="period" value={period} />

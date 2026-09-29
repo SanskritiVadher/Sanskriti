@@ -21,8 +21,8 @@ export default async function Inventory({ searchParams }: { searchParams: Promis
   const edit = can(ctx.role, "inventory.adjust");
 
   return <>
-    <PageHeader title="Inventory" subtitle="What stock do I have?" action={edit && <div className="flex gap-2">
-      <LinkButton href="/inventory/new">+ Add product</LinkButton><LinkButton href="/import?kind=products" variant="secondary">Import from Excel / Tally</LinkButton></div>} />
+    <PageHeader title="Inventory" subtitle="What stock do I have?" action={<div className="flex gap-2"><LinkButton href="/inventory/insights" variant="secondary">Stock insights</LinkButton>{edit && <>
+      <LinkButton href="/inventory/new">+ Add product</LinkButton><LinkButton href="/import?kind=products" variant="secondary">Import from Excel / Tally</LinkButton></>}</div>} />
     {sp.imported && <div className="mb-4"><Notice tone="good" title={`${sp.imported} products imported.`} /></div>}
 
     {all.length > 0 && <div className="mb-6 grid gap-4 md:grid-cols-3">

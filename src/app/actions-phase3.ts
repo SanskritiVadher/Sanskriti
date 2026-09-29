@@ -135,7 +135,7 @@ export async function correctionAction(f: FormData) {
     else if (kind === "unpaid") e = await unpaidBill(db, { ...b, expenseId: s(f, "expenseId") });
     else if (kind === "drawings") e = await ownerMoney(db, { ...b, cashBankId: s(f, "cashBankId"), direction: "OUT" });
     else if (kind === "capital") e = await ownerMoney(db, { ...b, cashBankId: s(f, "cashBankId"), direction: "IN" });
-    else if (kind === "depreciation") e = await depreciation(db, { ...b, assetId: s(f, "assetId") });
+    else if (kind === "depreciation") e = await depreciation(db, { ...b, assetId: s(f, "assetId"), ratePct: s(f, "ratePct"), halfYear: s(f, "halfYear") === "1" });
     else throw new UserFacingError("Choose what happened.");
   } catch (err) { fail(`/money/fix?kind=${kind}`, err, { amount: s(f, "amount"), note: s(f, "note") }); }
   redirect(`/reports/entry/${e!.id}?saved=1`);

@@ -74,6 +74,7 @@ describe("money", () => {
     expect(formatINR("1234567.5")).toBe("₹12,34,567.50");
     expect(formatINR("999")).toBe("₹999.00");
     expect(formatINR("-100000")).toBe("-₹1,00,000.00");
+    expect(formatINR(D(0).neg())).toBe("₹0.00");
     expect(formatINRShort("1840000")).toBe("₹18.4 lakh");
     expect(formatINRShort("84000")).toBe("₹84,000");
     expect(formatINRShort("12500000")).toBe("₹1.25 crore");

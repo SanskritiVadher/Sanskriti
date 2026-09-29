@@ -57,9 +57,15 @@ export async function attentionItems(db: DB, companyId: string): Promise<Attenti
     what: `${low.length} product${low.length > 1 ? "s are" : " is"} low or out of stock: ${low.slice(0, 3).map((s) => s.name).join(", ")}${low.length > 3 ? "…" : ""}.`,
     why: "You may miss sales if customers ask for these.", action: "Reorder from your supplier.", href: "/inventory?show=low", cta: "View stock" });
 
+  const oldOpen = await db.query.financialPeriods.findMany({ where: and(eq(schema.financialPeriods.companyId, companyId), eq(schema.financialPeriods.isClosed, false)) });
+  const sixMonthsAgo = new Date(Date.parse(today + "T00:00:00Z") - 183 * 86400000).toISOString().slice(0, 10);
+  const stale = oldOpen.filter((p) => p.endDate < sixMonthsAgo);
+  if (stale.length) out.push({ tone: "info", what: `${stale.map((p) => p.name).join(", ")} ended over six months ago and is still open.`,
+    why: "Anything dated in it can still be changed by mistake, which would change figures you've already filed.", action: "If its returns are filed, lock it.", href: "/settings/years", cta: "Lock" });
+
   const unconfirmed = active.filter((s) => s.gstRateStatus !== "USER_CONFIRMED").length;
   if (unconfirmed) out.push({ tone: "info", what: `${unconfirmed} product${unconfirmed > 1 ? "s have" : " has"} a GST rate that isn't confirmed.`,
-    why: "A wrong rate means wrong GST on every bill for that product.", action: "Check the rates against your CA or Tally, then tick 'confirmed'.", href: "/inventory", cta: "Review" });
+    why: "A wrong rate means wrong GST on every bill for that product.", action: "Compare with your supplier's GST bill for the same item (it shows HSN and rate), then confirm.", href: "/inventory", cta: "Review" });
   return out;
 }
 

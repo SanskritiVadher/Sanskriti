@@ -36,7 +36,7 @@ export async function ProductForm({ companyId, product, sp, categoryName }: { co
         <Field label="HSN code" hint="4, 6 or 8 digits" error={err("hsn")}><Input name="hsn" defaultValue={v("hsn")} inputMode="numeric" /></Field>
         <Field label="GST rate (%)" error={err("gstRate")}><Input name="gstRate" defaultValue={v("gstRate")} inputMode="decimal" /></Field>
         <label className="flex items-start gap-2 pt-7 text-[14px]"><input type="checkbox" name="gstConfirmed" value="1" defaultChecked={product?.gstRateStatus === "USER_CONFIRMED"} className="mt-1" />
-          I have checked this rate with my CA / Tally</label>
+          I have checked this rate (e.g. on my supplier&rsquo;s GST bill)</label>
         <p className="text-[13px] text-ink-3 sm:col-span-3">The app does not guess GST rates. An unticked rate is shown as &ldquo;not confirmed&rdquo; until checked. Automatic checks against official sources come in Phase 5.</p>
       </fieldset>
 

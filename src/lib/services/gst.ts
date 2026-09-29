@@ -1,8 +1,8 @@
 /**
  * GST returns, computed only from stored invoices, bills and notes (never re-derived from product data).
- * Free route: the app prepares GSTR-1 in the portal's JSON upload format + an Excel for the CA; GSTR-2B is
+ * Free route: the app prepares GSTR-1 in the portal's JSON upload format + an Excel copy; GSTR-2B is
  * downloaded by the owner from the portal and uploaded here for matching.
- * Rules encoded here (check with CA; GST rules change):
+ * Rules encoded here (GST rules change; review when notifications change):
  *  - B2CL: inter-state invoice to an unregistered buyer with invoice value > ₹1,00,000 (Notification 12/2024, from 1 Aug 2024)
  *  - HSN summary (Table 12) reported separately for B2B and B2C (from 2025)
  *  - ITC set-off order (Sec 49 / Rule 88A): IGST credit first (IGST → CGST/SGST), then CGST (CGST → IGST), SGST (SGST → IGST).
@@ -291,7 +291,7 @@ export function ruleFor(rules: Rule[], hsn: string | null, day: string) {
 export const STARTER_RULES = [
   { hsnPrefix: "8507", description: "Batteries / electric accumulators (lead-acid, lithium-ion)", rate: "18", effectiveFrom: "2025-09-22",
     sourceName: "Tally Solutions guide (56th GST Council changes)", sourceUrl: "https://tallysolutions.com/gst/hsn-code-8507-product-classification-gst-rate-business-filing-guide/",
-    notes: "Earlier: many lead-acid batteries 28%. Confirm against the official rate notification with your CA before marking verified." },
+    notes: "Earlier: many lead-acid batteries 28%. Check against your supplier's GST bill for the same HSN before confirming." },
 ];
 
 export async function addRule(db: DB, companyId: string, userId: string, r: { hsnPrefix: string; description: string; rate: string; effectiveFrom: string; sourceName?: string; sourceUrl?: string; status: "VERIFIED" | "USER_CONFIRMED" | "SECONDARY_SOURCE" | "UNVERIFIED"; notes?: string }) {

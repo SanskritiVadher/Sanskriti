@@ -178,7 +178,7 @@ export async function cashReceiptWarnings(q: Tx | DB, companyId: string, partyId
     JOIN journal_lines l2 ON l2.entry_id = e.id JOIN accounts a ON a.id = l2.account_id AND a.system_key = 'CASH'
     WHERE l.company_id = ${companyId} AND l.party_id = ${partyId} AND l.credit > 0`);
   const t = D(r.rows[0].total);
-  return t.gte(200000) ? [`Cash received from this customer today totals ${formatINR(t)}. Receiving ₹2 lakh or more in cash from one person in a day can attract a penalty equal to the amount. Please check with your CA.`] : [];
+  return t.gte(200000) ? [`Cash received from this customer today totals ${formatINR(t)}. Receiving ₹2 lakh or more in cash from one person in a day can attract a penalty equal to the amount. Ask for bank transfer or UPI for amounts this size.`] : [];
 }
 
 /** Section 40A(3) (renumbered): a cash payment of more than ₹10,000 to one person in a day may not be allowed as an expense. */
@@ -192,7 +192,7 @@ export async function cashPaymentWarnings(q: Tx | DB, companyId: string, date: s
       WHERE l.company_id = ${companyId} AND l.party_id = ${partyId} AND l.debit > 0`);
     t = D(r.rows[0].total);
   }
-  return t.gt(10000) ? [`Cash paid ${partyId ? "to this supplier today totals" : "is"} ${formatINR(t)}. Cash payments over ₹10,000 to one person in a day may not be allowed as a business expense for income tax. Prefer bank/UPI, and check with your CA.`] : [];
+  return t.gt(10000) ? [`Cash paid ${partyId ? "to this supplier today totals" : "is"} ${formatINR(t)}. Cash payments over ₹10,000 to one person in a day may not be allowed as a business expense for income tax. Pay by bank transfer or UPI instead.`] : [];
 }
 
 /** Cancel an invoice: reverses the ledger entry and puts the goods back at their original cost. The number stays used. */

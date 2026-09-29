@@ -97,7 +97,7 @@ export async function createDebitNote(db: DB, p: { companyId: string; userId: st
       const [st] = await tx.select({ q: sql<string>`coalesce(sum(${schema.inventoryTransactions.quantity}),0)`, v: sql<string>`coalesce(sum(${schema.inventoryTransactions.value}),0)` })
         .from(schema.inventoryTransactions).where(eq(schema.inventoryTransactions.productId, x.s.productId));
       if (x.q.gt(st.q)) throw new UserFacingError(`Only ${D(st.q).toString()} in stock; you can't send back ${x.q.toString()}.`);
-      if (D(toDb(x.q.mul(x.s.unitCost))).gt(st.v)) throw new UserFacingError("Stock value is lower than this return's cost. Please check with your accountant.");
+      if (D(toDb(x.q.mul(x.s.unitCost))).gt(st.v)) throw new UserFacingError("Stock value is lower than this return's cost. Correct the stock first (Inventory → the product → Correct the stock).");
     }
     const calc = calcInvoice(picked.map((x) => ({ qty: x.q, rate: x.s!.rate, gstRate: x.s!.gstRate })), bill.supplyType);
     const costs = picked.map((x) => D(toDb(x.q.mul(x.s!.unitCost))));

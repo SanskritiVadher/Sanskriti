@@ -42,7 +42,7 @@ export async function OpeningForm({ companyId, back }: { companyId: string; back
     <Notice tone="info" title="Stock, customer dues and supplier dues are entered separately.">
       Add each product&rsquo;s stock in Inventory, and each customer&rsquo;s / supplier&rsquo;s old balance on their page, or import them all from Tally.</Notice>
     <p className="text-[13px] text-ink-3">How this balances: whatever the business owns minus what it owes is recorded as the owner&rsquo;s opening stake
-      (&ldquo;Opening balances (setup)&rdquo;). Your accountant can move it to capital later.</p>
+      (&ldquo;Opening balances (setup)&rdquo;). It&rsquo;s shown as part of your stake in the business; nothing else to do.</p>
     <Button>Save opening balances</Button>
   </form>;
 }

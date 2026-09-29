@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { requireContext } from "@/lib/session";
 import { correctionOptions } from "@/lib/services/corrections";
 import { todayIST } from "@/lib/dates";
+import { formatINR } from "@/lib/money";
 import { AccountSelect } from "@/components/accounts-select";
 import { Button, Card, Field, Input, Notice, PageHeader } from "@/components/ui";
 import { correctionAction } from "@/app/actions-phase3";
@@ -12,7 +13,7 @@ const KINDS = {
   unpaid: { q: "I have a bill I haven't paid yet", help: "Records the expense now. When you pay, use Money out → Paid for: \"Expenses not yet paid\"." },
   drawings: { q: "I took money from the business for personal / home use", help: "Recorded as money taken out by the owner, not as a business expense." },
   capital: { q: "I put my own money into the business", help: "Recorded as owner's capital, not as income." },
-  depreciation: { q: "My vehicle or equipment has lost value (yearly)", help: "Usually done once a year. Take the amount from your CA; the app does not guess rates." },
+  depreciation: { q: "My vehicle or equipment has lost value (yearly)", help: "Done once a year, on 31 March. Choose a yearly rate and the app works out the amount on the asset's current value." },
 } as const;
 
 export default async function Fix({ searchParams }: { searchParams: Promise<{ kind?: string; error?: string; field?: string; amount?: string; note?: string }> }) {
@@ -39,8 +40,13 @@ export default async function Fix({ searchParams }: { searchParams: Promise<{ ki
           <Field label="It should be under" error={err("toId")}><AccountSelect name="toId" options={[...o.expenses, ...o.income]} /></Field></>}
         {kind === "unpaid" && <Field label="What is the bill for" error={err("expenseId")}><AccountSelect name="expenseId" options={o.expenses} /></Field>}
         {(kind === "drawings" || kind === "capital") && <Field label={kind === "drawings" ? "Taken from" : "Put into"} error={err("cashBankId")}><AccountSelect name="cashBankId" options={o.cashBank} defaultValue={o.cashBank[0]?.id} /></Field>}
-        {kind === "depreciation" && <Field label="Which asset" error={err("assetId")}><AccountSelect name="assetId" options={o.fixed} /></Field>}
-        <Field label="Amount (₹)" error={err("amount")}><Input name="amount" inputMode="decimal" required defaultValue={sp.amount} className="num" /></Field>
+        {kind === "depreciation" && <>
+          <Field label="Which asset" error={err("assetId")}><AccountSelect name="assetId" options={o.fixed.map((f) => ({ ...f, label: `${f.label} (now ${formatINR(o.fixedValues[f.id] ?? 0)})` }))} /></Field>
+          <Field label="Yearly rate %" hint="Common income-tax rates: vehicles 15, furniture 10, machinery 15, computers 40. Check they still apply."><Input name="ratePct" inputMode="decimal" defaultValue="15" /></Field>
+          <label className="flex items-center gap-2 text-[14px] sm:col-span-2"><input type="checkbox" name="halfYear" value="1" /> Bought this year and used for less than 180 days (half the rate)</label>
+          <p className="text-[13px] text-ink-3 sm:col-span-2">Or type an exact amount below instead; it overrides the rate.</p>
+        </>}
+        <Field label={kind === "depreciation" ? "Exact amount (₹), optional" : "Amount (₹)"} error={err("amount")}><Input name="amount" inputMode="decimal" required={kind !== "depreciation"} defaultValue={sp.amount} className="num" /></Field>
         <Field label="Date"><Input type="date" name="date" defaultValue={todayIST()} required /></Field>
         <Field label="Note (optional)"><Input name="note" defaultValue={sp.note} /></Field>
         <div className="flex gap-3 sm:col-span-2"><Button>Save</Button><Link href="/money/fix" className="py-2.5 text-ink-2">Back</Link></div>

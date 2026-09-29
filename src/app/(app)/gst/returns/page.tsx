@@ -24,10 +24,10 @@ export default async function Returns({ searchParams }: { searchParams: Promise<
     <PageHeader title="GST return figures" subtitle={`${per.label} · for filing on the GST portal`} action={<PeriodPicker value={period} action="/gst/returns" />} />
     <Card className="mb-6">
       <h2 className="text-[18px] font-semibold">GSTR-1 (sales)</h2>
-      <p className="mb-3 text-[14px] text-ink-2">Download for your CA, or upload the JSON in the GST portal&rsquo;s offline tool. Check it there before filing: the portal&rsquo;s format changes from time to time.</p>
+      <p className="mb-3 text-[14px] text-ink-2">Upload the JSON in the GST portal&rsquo;s offline tool, or type these totals into the portal directly. Before you submit, check that the portal shows the same totals as this page.</p>
       <div className="mb-4 flex flex-wrap gap-2">
         <a className="rounded-lg bg-brand px-4 py-2.5 text-brand-ink" href={`/gst/export?period=${period}&format=json`}>Download GSTR-1 JSON</a>
-        <a className="rounded-lg border border-line bg-surface px-4 py-2.5" href={`/gst/export?period=${period}&format=xlsx`}>Download Excel (for CA)</a>
+        <a className="rounded-lg border border-line bg-surface px-4 py-2.5" href={`/gst/export?period=${period}&format=xlsx`}>Download Excel</a>
       </div>
       <div className="overflow-x-auto"><table className="w-full min-w-[640px] text-[14px]"><caption className="sr-only">GSTR-1 summary</caption><Head /><tbody>
         <Row label={`B2B — to registered buyers (${r1.b2b.length} invoices)`} t={r1.totals.b2b} />
@@ -63,7 +63,7 @@ export default async function Returns({ searchParams }: { searchParams: Promise<
         <tr className="border-t-2 border-ink font-semibold"><td className="py-1">Pay in cash</td><td className="num text-right">{formatINR(r3.setoff.cash.igst)}</td><td className="num text-right">{formatINR(r3.setoff.cash.cgst)}</td><td className="num text-right">{formatINR(r3.setoff.cash.sgst)}</td></tr>
       </tbody></table>
       <p className="mt-3 text-[13px] text-ink-3">Credit carried forward: IGST {formatINR(r3.setoff.carryForward.igst)}, CGST {formatINR(r3.setoff.carryForward.cgst)}, SGST {formatINR(r3.setoff.carryForward.sgst)}.
-        Late fees, interest, reverse charge and cess are not calculated here. Your CA should confirm before filing.</p>
+        Late fees, interest, reverse charge and cess are not calculated here. If the portal shows a different amount, first check the 2B match and Items requiring review.</p>
     </Card>
   </>;
 }

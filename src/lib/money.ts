@@ -12,7 +12,7 @@ export const toDb = (v: Decimal.Value) => toPaise(v).toFixed(2);
 /** Indian grouping: 1234567.5 -> "₹12,34,567.50" */
 export function formatINR(v: Decimal.Value, opts: { paise?: boolean } = {}) {
   const d = toPaise(v);
-  const neg = d.isNegative();
+  const neg = d.isNegative() && !d.isZero(); // never show "-₹0.00"
   const [int, frac] = d.abs().toFixed(2).split(".");
   const last3 = int.slice(-3);
   const rest = int.slice(0, -3).replace(/\B(?=(\d{2})+(?!\d))/g, ",");
@@ -24,7 +24,7 @@ export function formatINR(v: Decimal.Value, opts: { paise?: boolean } = {}) {
 export function formatINRShort(v: Decimal.Value) {
   const d = toPaise(v);
   const a = d.abs();
-  const sign = d.isNegative() ? "-" : "";
+  const sign = d.isNegative() && !d.isZero() ? "-" : "";
   if (a.gte(1e7)) return `${sign}₹${a.div(1e7).toDecimalPlaces(2).toString()} crore`;
   if (a.gte(1e5)) return `${sign}₹${a.div(1e5).toDecimalPlaces(1).toString()} lakh`;
   return formatINR(d, { paise: false });
